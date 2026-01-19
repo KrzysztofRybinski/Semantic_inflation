@@ -1,0 +1,7 @@
+scope 1
+scope 2
+scope 3
+emissions intensity
+energy use
+water use
+waste

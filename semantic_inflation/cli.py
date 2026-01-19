@@ -2,31 +2,31 @@ import argparse
 import json
 from pathlib import Path
 
-from semantic_inflation.config import load_config
+from semantic_inflation.config import load_settings
 from semantic_inflation.paths import repo_root
 from semantic_inflation.text.features import compute_features_from_file
 
 
 def _cmd_toy(args: argparse.Namespace) -> int:
-    config = load_config(args.config)
+    settings = load_settings(args.config)
     fixture = repo_root() / "data" / "fixtures" / "sample_filing.html"
     result = compute_features_from_file(
         fixture,
-        dictionary_version=config["text"]["dictionary_version"],
-        min_sentence_chars=int(config["text"]["min_sentence_chars"]),
+        dictionary_version=settings.text.dictionary_version,
+        min_sentence_chars=settings.text.min_sentence_chars,
     )
     print(json.dumps(result, indent=2, sort_keys=True))
     return 0
 
 
 def _cmd_features(args: argparse.Namespace) -> int:
-    config = load_config(args.config)
+    settings = load_settings(args.config)
     inputs: list[Path] = [Path(p) for p in args.input]
     results = [
         compute_features_from_file(
             path,
-            dictionary_version=config["text"]["dictionary_version"],
-            min_sentence_chars=int(config["text"]["min_sentence_chars"]),
+            dictionary_version=settings.text.dictionary_version,
+            min_sentence_chars=settings.text.min_sentence_chars,
         )
         for path in inputs
     ]
@@ -41,6 +41,14 @@ def _cmd_features(args: argparse.Namespace) -> int:
     else:
         for r in results:
             print(json.dumps(r, sort_keys=True))
+    return 0
+
+
+def _cmd_config(args: argparse.Namespace) -> int:
+    settings = load_settings(args.config)
+    payload = settings.model_dump(mode="json")
+    payload["paths"]["resolved"] = settings.resolved_paths()
+    print(json.dumps(payload, indent=2, sort_keys=True))
     return 0
 
 
@@ -62,6 +70,9 @@ def build_parser() -> argparse.ArgumentParser:
     p_feat.add_argument("--output", help="Optional JSONL output path")
     p_feat.set_defaults(func=_cmd_features)
 
+    p_config = sub.add_parser("config", help="Print resolved configuration")
+    p_config.set_defaults(func=_cmd_config)
+
     return parser
 
 
@@ -69,4 +80,3 @@ def main(argv: list[str] | None = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
     return int(args.func(args))
-

@@ -1,0 +1,8 @@
+tco2e
+metric ton
+metric tonne
+mwh
+kwh
+gj
+percent
+%
