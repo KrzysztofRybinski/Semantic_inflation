@@ -1,0 +1,13 @@
+[project]
+start_year = 2009
+end_year = 2024
+filing_forms = ["*"]  # "*" = all forms
+
+[paths]
+data_dir = "data"
+outputs_dir = "outputs"
+
+[text]
+dictionary_version = "v1"
+min_sentence_chars = 10
+

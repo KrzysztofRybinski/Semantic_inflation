@@ -1,0 +1,89 @@
+[meta]
+version = "v1"
+created_utc = "2026-01-13"
+description = "Frozen dictionaries for environmental, aspirational, and KPI detection."
+
+[environment]
+terms = [
+  "climate",
+  "greenhouse gas*",
+  "ghg*",
+  "carbon",
+  "co2",
+  "co2e",
+  "emission*",
+  "scope 1",
+  "scope 2",
+  "scope 3",
+  "net zero",
+  "carbon neutral",
+  "renewable*",
+  "decarbon*",
+  "energy efficien*",
+  "methane",
+  "waste",
+  "water",
+  "sustainab*",
+  "environment*",
+  "esg",
+  "pollution",
+]
+
+[aspirational]
+terms = [
+  "aim*",
+  "target*",
+  "commit*",
+  "pledge*",
+  "aspir*",
+  "intend*",
+  "plan*",
+  "will",
+  "goal*",
+  "ambition*",
+  "journey",
+  "striv*",
+  "working toward*",
+  "seek to*",
+  "objective*",
+  "roadmap*",
+]
+net_zero_terms = [
+  "net zero",
+  "carbon neutral",
+  "science-based target*",
+  "science based target*",
+  "sbti*",
+]
+
+[kpi]
+unit_terms = [
+  "tco2e",
+  "co2e",
+  "metric ton*",
+  "ton*",
+  "kg",
+  "kilogram*",
+  "mwh",
+  "kwh",
+  "gj",
+  "gallon*",
+  "m3",
+  "cubic meter*",
+  "ppm",
+  "%",
+  "percent",
+  "percentage",
+]
+label_terms = [
+  "scope 1",
+  "scope 2",
+  "scope 3",
+  "emissions intensity",
+  "renewable energy",
+  "renewable share",
+  "energy consumption",
+  "water consumption",
+  "waste generated",
+]
+
