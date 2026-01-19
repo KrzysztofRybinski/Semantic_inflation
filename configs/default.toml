@@ -1,13 +1,33 @@
 [project]
 start_year = 2009
 end_year = 2024
-filing_forms = ["*"]  # "*" = all forms
+filing_forms = ["10-K"]
+
+[sec]
+user_agent = "Example Researcher (example@example.com)"
+requests_per_second = 10
+use_bulk_submissions = true
+use_bulk_companyfacts = true
 
 [paths]
 data_dir = "data"
 outputs_dir = "outputs"
 
+[dictionaries]
+env_tokens_path = "assets/dicts/environment_tokens.txt"
+aspiration_markers_path = "assets/dicts/aspiration_markers.txt"
+kpi_units_path = "assets/dicts/kpi_units.txt"
+kpi_labels_path = "assets/dicts/kpi_labels.txt"
+number_words_path = "assets/dicts/number_words.txt"
+corp_suffixes_path = "assets/dicts/corp_suffixes.txt"
+
 [text]
 dictionary_version = "v1"
 min_sentence_chars = 10
+sentence_splitter = "regex"
+store_sentence_samples = false
 
+[runtime]
+chunk_size = 100000
+max_workers = 4
+request_timeout_seconds = 60
