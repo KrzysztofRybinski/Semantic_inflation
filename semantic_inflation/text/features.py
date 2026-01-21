@@ -23,10 +23,29 @@ def _file_sha256(path: Path) -> str:
     return h.hexdigest()
 
 
-def _read_filing_text(path: Path) -> str:
+def _read_filing_text(
+    path: Path,
+    *,
+    html_extractor: str,
+    drop_hidden: bool,
+    drop_ix_hidden: bool,
+    unwrap_ix_tags: bool,
+    keep_tables: bool,
+    table_cell_sep: str,
+    table_row_sep: str,
+) -> str:
     raw = path.read_text(encoding="utf-8", errors="replace")
     if path.suffix.lower() in {".html", ".htm"}:
-        return html_to_text(raw)
+        return html_to_text(
+            raw,
+            extractor=html_extractor,
+            drop_hidden=drop_hidden,
+            drop_ix_hidden=drop_ix_hidden,
+            unwrap_ix_tags=unwrap_ix_tags,
+            keep_tables=keep_tables,
+            table_cell_sep=table_cell_sep,
+            table_row_sep=table_row_sep,
+        )
     return raw
 
 
@@ -87,9 +106,25 @@ def compute_features_from_file(
     *,
     dictionary_version: str = "v1",
     min_sentence_chars: int = 10,
+    html_extractor: str = "bs4",
+    drop_hidden: bool = True,
+    drop_ix_hidden: bool = True,
+    unwrap_ix_tags: bool = True,
+    keep_tables: bool = True,
+    table_cell_sep: str = " | ",
+    table_row_sep: str = "\n",
 ) -> dict:
     p = Path(path)
-    text = _read_filing_text(p)
+    text = _read_filing_text(
+        p,
+        html_extractor=html_extractor,
+        drop_hidden=drop_hidden,
+        drop_ix_hidden=drop_ix_hidden,
+        unwrap_ix_tags=unwrap_ix_tags,
+        keep_tables=keep_tables,
+        table_cell_sep=table_cell_sep,
+        table_row_sep=table_row_sep,
+    )
     feats = compute_features_from_text(
         text,
         dictionary_version=dictionary_version,
@@ -97,5 +132,13 @@ def compute_features_from_file(
     )
     feats["input_path"] = str(p)
     feats["input_sha256"] = _file_sha256(p)
+    feats["html_extractor"] = html_extractor
+    feats["html_extractor_settings"] = {
+        "drop_hidden": drop_hidden,
+        "drop_ix_hidden": drop_ix_hidden,
+        "unwrap_ix_tags": unwrap_ix_tags,
+        "keep_tables": keep_tables,
+        "table_cell_sep": table_cell_sep,
+        "table_row_sep": table_row_sep,
+    }
     return feats
-

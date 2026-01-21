@@ -27,6 +27,15 @@ min_sentence_chars = 10
 sentence_splitter = "regex"
 store_sentence_samples = false
 
+[text.html]
+extractor = "bs4"
+drop_hidden = true
+drop_ix_hidden = true
+unwrap_ix_tags = true
+keep_tables = true
+table_cell_sep = " | "
+table_row_sep = "\n"
+
 [runtime]
 chunk_size = 100000
 max_workers = 4
