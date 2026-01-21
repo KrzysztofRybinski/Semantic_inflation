@@ -4,6 +4,7 @@ from pathlib import Path
 
 from semantic_inflation.config import load_settings
 from semantic_inflation.paths import repo_root
+from semantic_inflation.text.clean_html import html_to_text
 from semantic_inflation.text.features import compute_features_from_file
 
 
@@ -14,6 +15,13 @@ def _cmd_toy(args: argparse.Namespace) -> int:
         fixture,
         dictionary_version=settings.text.dictionary_version,
         min_sentence_chars=settings.text.min_sentence_chars,
+        html_extractor=settings.text.html.extractor,
+        drop_hidden=settings.text.html.drop_hidden,
+        drop_ix_hidden=settings.text.html.drop_ix_hidden,
+        unwrap_ix_tags=settings.text.html.unwrap_ix_tags,
+        keep_tables=settings.text.html.keep_tables,
+        table_cell_sep=settings.text.html.table_cell_sep,
+        table_row_sep=settings.text.html.table_row_sep,
     )
     print(json.dumps(result, indent=2, sort_keys=True))
     return 0
@@ -27,6 +35,13 @@ def _cmd_features(args: argparse.Namespace) -> int:
             path,
             dictionary_version=settings.text.dictionary_version,
             min_sentence_chars=settings.text.min_sentence_chars,
+            html_extractor=settings.text.html.extractor,
+            drop_hidden=settings.text.html.drop_hidden,
+            drop_ix_hidden=settings.text.html.drop_ix_hidden,
+            unwrap_ix_tags=settings.text.html.unwrap_ix_tags,
+            keep_tables=settings.text.html.keep_tables,
+            table_cell_sep=settings.text.html.table_cell_sep,
+            table_row_sep=settings.text.html.table_row_sep,
         )
         for path in inputs
     ]
@@ -41,6 +56,33 @@ def _cmd_features(args: argparse.Namespace) -> int:
     else:
         for r in results:
             print(json.dumps(r, sort_keys=True))
+    return 0
+
+
+def _cmd_extract_text(args: argparse.Namespace) -> int:
+    settings = load_settings(args.config)
+    input_path = Path(args.input)
+    raw = input_path.read_text(encoding="utf-8", errors="replace")
+    if input_path.suffix.lower() in {".html", ".htm"}:
+        text = html_to_text(
+            raw,
+            extractor=settings.text.html.extractor,
+            drop_hidden=settings.text.html.drop_hidden,
+            drop_ix_hidden=settings.text.html.drop_ix_hidden,
+            unwrap_ix_tags=settings.text.html.unwrap_ix_tags,
+            keep_tables=settings.text.html.keep_tables,
+            table_cell_sep=settings.text.html.table_cell_sep,
+            table_row_sep=settings.text.html.table_row_sep,
+        )
+    else:
+        text = raw
+
+    if args.output:
+        out_path = Path(args.output)
+        out_path.parent.mkdir(parents=True, exist_ok=True)
+        out_path.write_text(text, encoding="utf-8")
+    else:
+        print(text)
     return 0
 
 
@@ -69,6 +111,13 @@ def build_parser() -> argparse.ArgumentParser:
     p_feat.add_argument("--input", nargs="+", required=True, help="Input HTML/text files")
     p_feat.add_argument("--output", help="Optional JSONL output path")
     p_feat.set_defaults(func=_cmd_features)
+
+    p_extract = sub.add_parser(
+        "extract-text", help="Extract clean text from HTML filings for debugging"
+    )
+    p_extract.add_argument("--input", required=True, help="Input HTML/text file")
+    p_extract.add_argument("--output", help="Optional output path for extracted text")
+    p_extract.set_defaults(func=_cmd_extract_text)
 
     p_config = sub.add_parser("config", help="Print resolved configuration")
     p_config.set_defaults(func=_cmd_config)
