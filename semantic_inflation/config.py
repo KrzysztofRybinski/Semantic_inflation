@@ -59,11 +59,22 @@ class DictionarySettings(BaseModel):
     corp_suffixes_path: Path = Path("assets/dicts/corp_suffixes.txt")
 
 
+class TextHtmlSettings(BaseModel):
+    extractor: str = "bs4"
+    drop_hidden: bool = True
+    drop_ix_hidden: bool = True
+    unwrap_ix_tags: bool = True
+    keep_tables: bool = True
+    table_cell_sep: str = " | "
+    table_row_sep: str = "\n"
+
+
 class TextSettings(BaseModel):
     dictionary_version: str = "v1"
     min_sentence_chars: int = 10
     sentence_splitter: str = "regex"
     store_sentence_samples: bool = False
+    html: TextHtmlSettings = Field(default_factory=TextHtmlSettings)
 
 
 class RuntimeSettings(BaseModel):
