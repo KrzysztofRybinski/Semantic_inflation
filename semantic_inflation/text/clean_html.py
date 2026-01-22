@@ -104,7 +104,12 @@ def _html_to_text_bs4(
     if drop_hidden:
         for tag in soup.find_all(True):
             style = (tag.get("style") or "").lower()
-            if tag.has_attr("hidden") or "display:none" in style or "visibility:hidden" in style:
+            normalized_style = re.sub(r"\s+", "", style)
+            if (
+                tag.has_attr("hidden")
+                or "display:none" in normalized_style
+                or "visibility:hidden" in normalized_style
+            ):
                 tag.decompose()
 
     if keep_tables:
