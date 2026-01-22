@@ -105,7 +105,7 @@ def _html_to_text_bs4(
 
     if drop_hidden:
         for tag in soup.find_all(True):
-            if not isinstance(tag, Tag):
+            if not isinstance(tag, Tag) or tag.attrs is None:
                 continue
             style = (tag.get("style") or "").lower()
             normalized_style = re.sub(r"\s+", "", style)
