@@ -5,7 +5,7 @@ from html.parser import HTMLParser
 from pathlib import Path
 import re
 
-from bs4 import BeautifulSoup, NavigableString
+from bs4 import BeautifulSoup, NavigableString, Tag
 
 
 _BLOCK_TAGS = {
@@ -94,6 +94,8 @@ def _html_to_text_bs4(
         tag.decompose()
 
     for tag in soup.find_all(True):
+        if not isinstance(tag, Tag):
+            continue
         name = (tag.name or "").lower()
         if name == "ix:hidden" and drop_ix_hidden:
             tag.decompose()
@@ -103,6 +105,8 @@ def _html_to_text_bs4(
 
     if drop_hidden:
         for tag in soup.find_all(True):
+            if not isinstance(tag, Tag) or tag.attrs is None:
+                continue
             style = (tag.get("style") or "").lower()
             normalized_style = re.sub(r"\s+", "", style)
             if (
