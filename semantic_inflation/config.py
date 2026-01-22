@@ -83,6 +83,29 @@ class RuntimeSettings(BaseModel):
     request_timeout_seconds: int = 60
 
 
+class PipelineSecSettings(BaseModel):
+    filings_index_path: Path = Path("data/fixtures/filings_index.csv")
+    max_filings: int | None = None
+
+
+class PipelineGhgrpSettings(BaseModel):
+    fixture_path: Path = Path("data/fixtures/ghgrp_sample.csv")
+    source_url: str | None = None
+
+
+class PipelineEchoSettings(BaseModel):
+    fixture_path: Path = Path("data/fixtures/echo_sample.csv")
+    source_url: str | None = None
+
+
+class PipelineSettings(BaseModel):
+    mode: str = "full"
+    cik_source: str = "ghgrp_matched"
+    sec: PipelineSecSettings = Field(default_factory=PipelineSecSettings)
+    ghgrp: PipelineGhgrpSettings = Field(default_factory=PipelineGhgrpSettings)
+    echo: PipelineEchoSettings = Field(default_factory=PipelineEchoSettings)
+
+
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(
         env_prefix="SEMANTIC_INFLATION_",
@@ -96,6 +119,7 @@ class Settings(BaseSettings):
     dictionaries: DictionarySettings = Field(default_factory=DictionarySettings)
     text: TextSettings = Field(default_factory=TextSettings)
     runtime: RuntimeSettings = Field(default_factory=RuntimeSettings)
+    pipeline: PipelineSettings = Field(default_factory=PipelineSettings)
 
     def resolved_paths(self) -> dict[str, str]:
         return {

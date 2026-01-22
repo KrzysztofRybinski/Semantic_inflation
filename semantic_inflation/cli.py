@@ -4,6 +4,7 @@ from pathlib import Path
 
 from semantic_inflation.config import load_settings
 from semantic_inflation.paths import repo_root
+from semantic_inflation.pipeline import PipelineContext, run_doctor, run_all
 from semantic_inflation.text.clean_html import html_to_text
 from semantic_inflation.text.features import compute_features_from_file
 
@@ -94,6 +95,22 @@ def _cmd_config(args: argparse.Namespace) -> int:
     return 0
 
 
+def _cmd_doctor(args: argparse.Namespace) -> int:
+    settings = load_settings(args.config)
+    context = PipelineContext(settings)
+    payload = run_doctor(context)
+    print(json.dumps(payload, indent=2, sort_keys=True))
+    return 0
+
+
+def _cmd_run_all(args: argparse.Namespace) -> int:
+    settings = load_settings(args.config)
+    context = PipelineContext(settings)
+    payload = run_all(context)
+    print(json.dumps(payload, indent=2, sort_keys=True))
+    return 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="semantic_inflation")
     parser.add_argument(
@@ -121,6 +138,15 @@ def build_parser() -> argparse.ArgumentParser:
 
     p_config = sub.add_parser("config", help="Print resolved configuration")
     p_config.set_defaults(func=_cmd_config)
+
+    p_doctor = sub.add_parser("doctor", help="Run preflight checks and safe fixes")
+    p_doctor.set_defaults(func=_cmd_doctor)
+
+    p_run_all = sub.add_parser(
+        "run-all",
+        help="Run the full semantic inflation research pipeline",
+    )
+    p_run_all.set_defaults(func=_cmd_run_all)
 
     return parser
 
