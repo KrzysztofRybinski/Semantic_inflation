@@ -20,6 +20,9 @@ Run the toy example:
 python3 -m semantic_inflation toy
 ```
 
+> **Note (Windows PowerShell):** Redirecting output with `>` writes UTF-16 by default, which will fail UTF-8 reads.
+> Use `| Set-Content -Encoding utf8 outputs/toy.json` or `| Out-File -Encoding utf8 outputs/toy.json` instead.
+
 Extract features from a local file:
 
 ```bash
