@@ -1,0 +1,29 @@
+[project]
+start_year = 2009
+end_year = 2024
+filing_forms = ["10-K"]
+
+[sec]
+user_agent = "Semantic Inflation Research (contact@example.com)"
+requests_per_second = 5
+use_bulk_submissions = true
+use_bulk_companyfacts = true
+
+[paths]
+data_dir = "data"
+outputs_dir = "outputs"
+
+[pipeline]
+mode = "full"
+cik_source = "ghgrp_matched"
+
+[pipeline.sec]
+filings_index_path = "data/raw/sec/filings_index.csv"
+
+[pipeline.ghgrp]
+fixture_path = "data/fixtures/ghgrp_sample.csv"
+source_url = ""
+
+[pipeline.echo]
+fixture_path = "data/fixtures/echo_sample.csv"
+source_url = ""

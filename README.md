@@ -29,6 +29,22 @@ Extract features from a local file:
 python3 -m semantic_inflation features --input path/to/filing.html
 ```
 
+## End-to-end research pipeline
+
+Run the full pipeline (preflight checks → SEC → GHGRP → ECHO → linkage → panel → models):
+
+```bash
+python3 -m semantic_inflation run-all --config configs/pipeline.toml
+```
+
+Run the preflight doctor checks (creates missing directories, cleans zero-byte files):
+
+```bash
+python3 -m semantic_inflation doctor --config configs/pipeline.toml
+```
+
+Pipeline outputs are written to `data/processed/` (parquet intermediates) and `outputs/` (QC + model results).
+
 ## Reproducibility standards
 
 - Dictionaries/regex rules are stored in `semantic_inflation/resources/dictionaries_v1.toml` and should be treated as **frozen** once pre-registered.
