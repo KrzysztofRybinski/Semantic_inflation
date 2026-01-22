@@ -1,14 +1,28 @@
 # Research pipeline commands (steps 6–12)
 
-Run the commands **in order**. Each step includes the QC command immediately after the main command.
+Run the commands **in order** from the **VS Code integrated terminal**. The default below is **bash/zsh** (macOS/Linux, WSL, or Git Bash). PowerShell alternatives are included when the original example used `Tee-Object` or other PowerShell-only syntax.
 
 > **Note on shells:**
-> - Commands below are written for **PowerShell** (Windows) to match the pipeline examples (e.g., `Tee-Object`).
-> - If you are on **bash/zsh**, see the bash variants included for Steps 8–10.
+> - **Bash/zsh** is the default in VS Code on macOS/Linux/WSL.
+> - **PowerShell** snippets are labeled explicitly.
+> - All commands use **uv** where possible.
 
 ---
 
 ## 6) Verify you have at least one real SEC HTML file to process
+
+**QC command (bash/zsh):**
+
+```bash
+@'
+from pathlib import Path
+
+p = Path("data/raw/sec/aapl-20240928.htm")
+assert p.exists(), f"Missing input file: {p}"
+assert p.stat().st_size > 50_000, f"File seems too small: {p.stat().st_size} bytes"
+print("QC PASS: found sample filing:", p, "bytes=", p.stat().st_size)
+'@ | uv run python -
+```
 
 **QC command (PowerShell):**
 
@@ -27,9 +41,9 @@ print("QC PASS: found sample filing:", p, "bytes=", p.stat().st_size)
 
 ## 7) Extract clean text from HTML (library call; works even if CLI changed)
 
-**Command (PowerShell):**
+**Command (bash/zsh):**
 
-```powershell
+```bash
 @'
 from pathlib import Path
 
@@ -55,9 +69,9 @@ print("First 200 chars:", txt[:200].replace("\n"," ") )
 '@ | uv run python -
 ```
 
-**QC command (PowerShell):**
+**QC command (bash/zsh):**
 
-```powershell
+```bash
 @'
 from pathlib import Path
 
@@ -85,21 +99,21 @@ print("Sample tokens present:", [w for w in ["climate","emission","greenhouse","
 
 ## 8) Compute disclosure features (A_share, Q_share, counts, hashes) for the filing
 
+**Command (bash/zsh):**
+
+```bash
+uv run python -m semantic_inflation features --input data/raw/sec/aapl-20240928.htm | tee outputs/features/aapl-20240928.json
+```
+
 **Command (PowerShell):**
 
 ```powershell
 uv run python -m semantic_inflation features --input data\raw\sec\aapl-20240928.htm | Tee-Object outputs\features\aapl-20240928.json
 ```
 
-**Command (bash/zsh equivalent):**
+**QC command (bash/zsh):**
 
 ```bash
-uv run python -m semantic_inflation features --input data/raw/sec/aapl-20240928.htm | tee outputs/features/aapl-20240928.json
-```
-
-**QC command (PowerShell):**
-
-```powershell
 @'
 import json, re
 from pathlib import Path
@@ -135,21 +149,21 @@ print({k: d[k] for k in ["A_share","Q_share","sentences_env","sentences_kpi","en
 
 ## 9) Determinism check (re-run features and compare stable fields)
 
+**Command (bash/zsh):**
+
+```bash
+uv run python -m semantic_inflation features --input data/raw/sec/aapl-20240928.htm | tee outputs/features/aapl-20240928.rerun.json
+```
+
 **Command (PowerShell):**
 
 ```powershell
 uv run python -m semantic_inflation features --input data\raw\sec\aapl-20240928.htm | Tee-Object outputs\features\aapl-20240928.rerun.json
 ```
 
-**Command (bash/zsh equivalent):**
+**QC command (bash/zsh):**
 
 ```bash
-uv run python -m semantic_inflation features --input data/raw/sec/aapl-20240928.htm | tee outputs/features/aapl-20240928.rerun.json
-```
-
-**QC command (PowerShell):**
-
-```powershell
 @'
 import json
 from pathlib import Path
@@ -169,18 +183,7 @@ print("QC PASS: deterministic on stable fields")
 
 ## 10) Batch compute features for ALL HTML filings in data/raw/sec/
 
-**Command (PowerShell):**
-
-```powershell
-Get-ChildItem -Path data\raw\sec -Recurse -Include *.htm,*.html | ForEach-Object {
-  $in  = $_.FullName
-  $out = Join-Path "outputs\features" ($_.BaseName + ".json")
-  Write-Host "FEATURES: $in -> $out"
-  uv run python -m semantic_inflation features --input $in | Out-File -Encoding utf8 $out
-}
-```
-
-**Command (bash/zsh equivalent):**
+**Command (bash/zsh):**
 
 ```bash
 find data/raw/sec -type f \( -name "*.htm" -o -name "*.html" \) -print0 | while IFS= read -r -d '' in; do
@@ -193,9 +196,20 @@ find data/raw/sec -type f \( -name "*.htm" -o -name "*.html" \) -print0 | while 
 done
 ```
 
-**QC command (PowerShell):**
+**Command (PowerShell):**
 
 ```powershell
+Get-ChildItem -Path data\raw\sec -Recurse -Include *.htm,*.html | ForEach-Object {
+  $in  = $_.FullName
+  $out = Join-Path "outputs\features" ($_.BaseName + ".json")
+  Write-Host "FEATURES: $in -> $out"
+  uv run python -m semantic_inflation features --input $in | Out-File -Encoding utf8 $out
+}
+```
+
+**QC command (bash/zsh):**
+
+```bash
 @'
 import json, glob, os, re
 from pathlib import Path
@@ -232,9 +246,9 @@ print(f"QC PASS: {len(paths)} feature files validated")
 
 ## 11) Build a single summary dataset (CSV) + compute a simple SI proxy
 
-**Command (PowerShell):**
+**Command (bash/zsh):**
 
-```powershell
+```bash
 @'
 import csv, glob, json, os
 from pathlib import Path
@@ -261,9 +275,9 @@ print("Wrote:", out, "rows=", len(rows))
 '@ | uv run python -
 ```
 
-**QC command (PowerShell):**
+**QC command (bash/zsh):**
 
-```powershell
+```bash
 @'
 import csv
 from pathlib import Path
@@ -302,9 +316,9 @@ if all(k==0 for k in KPI):
 
 ## 12) Record provenance (dictionary hash + git commit)
 
-**Command (PowerShell):**
+**Command (bash/zsh):**
 
-```powershell
+```bash
 @'
 import hashlib, json, subprocess
 from pathlib import Path
