@@ -4,8 +4,9 @@ from html import unescape
 from html.parser import HTMLParser
 from pathlib import Path
 import re
+import warnings
 
-from bs4 import BeautifulSoup, NavigableString, Tag
+from bs4 import BeautifulSoup, NavigableString, Tag, XMLParsedAsHTMLWarning
 
 
 _BLOCK_TAGS = {
@@ -88,6 +89,7 @@ def _html_to_text_bs4(
     table_cell_sep: str,
     table_row_sep: str,
 ) -> str:
+    warnings.filterwarnings("ignore", category=XMLParsedAsHTMLWarning)
     soup = BeautifulSoup(html, "lxml")
 
     for tag in soup(["script", "style", "noscript"]):
