@@ -108,7 +108,7 @@ uv run python -m semantic_inflation features --input data/raw/sec/aapl-20240928.
 **Command (PowerShell):**
 
 ```powershell
-uv run python -m semantic_inflation features --input data\raw\sec\aapl-20240928.htm | Tee-Object outputs\features\aapl-20240928.json
+uv run python -m semantic_inflation features --input data\raw\sec\aapl-20240928.htm | Tee-Object -FilePath outputs\features\aapl-20240928.json -Encoding utf8
 ```
 
 **QC command (bash/zsh):**
@@ -158,7 +158,7 @@ uv run python -m semantic_inflation features --input data/raw/sec/aapl-20240928.
 **Command (PowerShell):**
 
 ```powershell
-uv run python -m semantic_inflation features --input data\raw\sec\aapl-20240928.htm | Tee-Object outputs\features\aapl-20240928.rerun.json
+uv run python -m semantic_inflation features --input data\raw\sec\aapl-20240928.htm | Tee-Object -FilePath outputs\features\aapl-20240928.rerun.json -Encoding utf8
 ```
 
 **QC command (bash/zsh):**
