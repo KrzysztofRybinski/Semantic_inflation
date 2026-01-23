@@ -114,7 +114,7 @@ class PipelineSecSettings(BaseModel):
 
 class PipelineGhgrpSettings(BaseModel):
     fixture_path: Path = Path("data/fixtures/ghgrp_sample.csv")
-    use_fixture: bool = True
+    use_fixture: bool = False
     data_sets_page: str = "https://www.epa.gov/ghgreporting/data-sets"
     data_summary_label: str = "Data Summary Spreadsheets"
     parent_companies_label: str = "Reported Parent Companies"
@@ -127,7 +127,7 @@ class PipelineGhgrpSettings(BaseModel):
 
 class PipelineEchoSettings(BaseModel):
     fixture_path: Path = Path("data/fixtures/echo_sample.csv")
-    use_fixture: bool = True
+    use_fixture: bool = False
     case_downloads_url: str = "https://echo.epa.gov/files/echodownloads/case_downloads.zip"
     frs_downloads_url: str = "https://echo.epa.gov/files/echodownloads/frs_downloads.zip"
     schema_fields: list[str] = Field(default_factory=list)
