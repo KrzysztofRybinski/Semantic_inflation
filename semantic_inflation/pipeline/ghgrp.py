@@ -147,7 +147,9 @@ def parse_ghgrp_facility_year(
     id_col = _find_column(df.columns.tolist(), ["facility id", "ghgrp facility id"])
     name_col = _find_column(df.columns.tolist(), ["facility name", "plant name"])
     frs_col = _find_column(df.columns.tolist(), ["frs", "registry"])
-    reporting_col = _find_column(df.columns.tolist(), ["reporting year", "reporting_year"])
+    reporting_col = _find_column(
+        df.columns.tolist(), ["reporting year", "reporting_year", "year"]
+    )
     emissions_col = _find_column(df.columns.tolist(), ["co2e", "mtco2e", "emissions"])
 
     if not id_col:
@@ -188,7 +190,24 @@ def parse_ghgrp_facility_year(
     elif "reporting_year" in df.columns:
         long_df = df.copy()
     else:
-        raise ValueError("Unable to identify reporting year columns in GHGRP data summary.")
+        year_col = None
+        best_in_range = 0
+        for col in df.columns:
+            numeric_values = pd.to_numeric(df[col], errors="coerce")
+            non_null = numeric_values.dropna()
+            if non_null.empty:
+                continue
+            in_range = non_null.between(start_year, end_year, inclusive="both")
+            count_in_range = int(in_range.sum())
+            if count_in_range > best_in_range:
+                best_in_range = count_in_range
+                year_col = col
+        if year_col:
+            long_df = df.rename(columns={year_col: "reporting_year"}).copy()
+        else:
+            raise ValueError(
+                "Unable to identify reporting year columns in GHGRP data summary."
+            )
 
     long_df["reporting_year"] = pd.to_numeric(long_df["reporting_year"], errors="coerce")
     long_df = long_df[
