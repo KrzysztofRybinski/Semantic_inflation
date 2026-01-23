@@ -26,7 +26,7 @@ python3 -m semantic_inflation toy
 Extract features from a local file:
 
 ```bash
-python3 -m semantic_inflation features --input path/to/filing.html
+python -m semantic_inflation features --input path/to/filing.html
 ```
 
 ## End-to-end research pipeline
