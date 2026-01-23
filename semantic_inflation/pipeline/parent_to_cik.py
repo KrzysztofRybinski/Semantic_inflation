@@ -46,12 +46,14 @@ def _build_ghgrp_matched(
         how="left",
     )
     merged = merged.rename(columns={"matched_cik": "cik"})
-    unmatched = merged[merged["cik"].isna()][
+    cik_series = merged["cik"]
+    has_cik = cik_series.notna() & cik_series.astype(str).str.strip().ne("")
+    unmatched = merged[~has_cik][
         ["ghgrp_facility_id", "facility_name", "parent_company_name_raw"]
     ].drop_duplicates()
     diagnostics_path.parent.mkdir(parents=True, exist_ok=True)
     unmatched.to_csv(diagnostics_path, index=False)
-    matched = merged[merged["cik"].notna()].copy()
+    matched = merged[has_cik].copy()
     matched = matched[
         ["frs_id", "cik", "reporting_year", "facility_name", "emissions_mtco2e"]
     ].copy()
