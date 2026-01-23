@@ -107,14 +107,42 @@ def _extract_summary_table(zip_path: Path, extract_dir: Path) -> Path:
     return extracted_path
 
 
+def _detect_header_row(preview: pd.DataFrame, keywords: list[str]) -> int | None:
+    normalized_keywords = [_normalize_column(keyword) for keyword in keywords]
+    for idx, row in preview.iterrows():
+        for value in row.tolist():
+            normalized_value = _normalize_column(str(value))
+            if any(keyword and keyword in normalized_value for keyword in normalized_keywords):
+                return int(idx)
+    return None
+
+
+def _read_summary_table(extracted_path: Path) -> pd.DataFrame:
+    keywords = ["facility id", "ghgrp facility id"]
+    if extracted_path.suffix.lower() == ".csv":
+        preview = pd.read_csv(extracted_path, header=None, nrows=25, low_memory=False)
+        header_row = _detect_header_row(preview, keywords)
+        if header_row is not None and header_row != 0:
+            return pd.read_csv(extracted_path, header=header_row, low_memory=False)
+        return pd.read_csv(extracted_path, low_memory=False)
+
+    preview = pd.read_excel(extracted_path, header=None, nrows=25)
+    header_row = _detect_header_row(preview, keywords)
+    if header_row is not None and header_row != 0:
+        return pd.read_excel(extracted_path, header=header_row)
+    return pd.read_excel(extracted_path)
+
+
 def parse_ghgrp_facility_year(
     zip_path: Path, start_year: int, end_year: int, extract_dir: Path
 ) -> pd.DataFrame:
     extracted_path = _extract_summary_table(zip_path, extract_dir)
-    if extracted_path.suffix.lower() == ".csv":
-        df = pd.read_csv(extracted_path, low_memory=False)
-    else:
-        df = pd.read_excel(extracted_path)
+    df = _read_summary_table(extracted_path)
+    if isinstance(df.columns, pd.MultiIndex):
+        df.columns = [
+            " ".join([str(part) for part in column if str(part) != "nan"]).strip()
+            for column in df.columns
+        ]
 
     id_col = _find_column(df.columns.tolist(), ["facility id", "ghgrp facility id"])
     name_col = _find_column(df.columns.tolist(), ["facility name", "plant name"])
