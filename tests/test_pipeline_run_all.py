@@ -15,7 +15,7 @@ def _write_config(tmp_path: Path, repo_root: Path) -> Path:
         """
 [sec]
 user_agent = "Test Researcher (test@example.com)"
-requests_per_second = 5
+max_requests_per_second = 5
 
 [paths]
 data_dir = "{data_dir}"
@@ -23,7 +23,7 @@ outputs_dir = "{outputs_dir}"
 
 [pipeline]
 mode = "sample"
-cik_source = "ghgrp_matched"
+sample_frame = "ghgrp_matched"
 
 [pipeline.sec]
 filings_index_path = "{filings_index}"
@@ -33,6 +33,9 @@ fixture_path = "{ghgrp_fixture}"
 
 [pipeline.echo]
 fixture_path = "{echo_fixture}"
+
+[runtime]
+offline = true
 """.format(
             data_dir=tmp_path / "data",
             outputs_dir=tmp_path / "outputs",
@@ -51,8 +54,9 @@ def test_run_all_pipeline(tmp_path: Path) -> None:
     settings = load_settings(config_path)
     context = PipelineContext(settings)
 
-    result = run_all(context)
-    assert "models" in result
+    result = run_all(context, force=True)
+    assert "stages" in result
+    assert "models" in result["stages"]
 
     panel_path = settings.paths.processed_dir / "panel.parquet"
     linkage_path = settings.paths.processed_dir / "linkage.parquet"

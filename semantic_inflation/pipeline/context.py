@@ -29,6 +29,10 @@ class PipelineContext:
         return self.settings.paths.processed_dir
 
     @property
+    def cache_dir(self) -> Path:
+        return self.settings.paths.cache_dir
+
+    @property
     def outputs_dir(self) -> Path:
         return self.settings.paths.outputs_dir
 

@@ -10,7 +10,14 @@ from sklearn.linear_model import LogisticRegression
 from sklearn.metrics import roc_auc_score
 
 from semantic_inflation.pipeline.context import PipelineContext
-from semantic_inflation.pipeline.io_utils import is_complete, write_json
+from semantic_inflation.pipeline.io import write_json
+from semantic_inflation.pipeline.state import (
+    StageResult,
+    compute_inputs_hash,
+    should_skip_stage,
+    stage_manifest_path,
+    write_stage_manifest,
+)
 
 
 def _safe_series(df: pd.DataFrame, name: str, default: float = 0.0) -> pd.Series:
@@ -19,13 +26,19 @@ def _safe_series(df: pd.DataFrame, name: str, default: float = 0.0) -> pd.Series
     return pd.Series([default] * len(df))
 
 
-def run_models(context: PipelineContext) -> dict[str, Any]:
+def run_models(context: PipelineContext, force: bool = False) -> StageResult:
     settings = context.settings
-    manifest_path = settings.paths.outputs_dir / "manifests" / "models.json"
     output_path = settings.paths.outputs_dir / "results" / "models_summary.json"
-
-    if is_complete(manifest_path, [output_path]):
-        return {"skipped": True, "output": str(output_path)}
+    inputs_hash = compute_inputs_hash({"stage": "models", "config": settings.model_dump(mode="json")})
+    manifest_path = stage_manifest_path(settings.paths.outputs_dir, "models")
+    if should_skip_stage(manifest_path, [output_path], inputs_hash, force):
+        return StageResult(
+            name="models",
+            status="skipped",
+            outputs=[str(output_path)],
+            inputs_hash=inputs_hash,
+            stats={"skipped": True},
+        )
 
     panel = pd.read_parquet(settings.paths.processed_dir / "panel.parquet")
 
@@ -67,18 +80,29 @@ def run_models(context: PipelineContext) -> dict[str, Any]:
     output_path.parent.mkdir(parents=True, exist_ok=True)
     output_path.write_text(json.dumps(summary, indent=2, sort_keys=True), encoding="utf-8")
 
-    qc_payload = {
+    qc_payload: dict[str, Any] = {
         "rows": len(panel),
         "output": str(output_path),
         "auc": auc,
     }
-    write_json(settings.paths.outputs_dir / "qc" / "models_qc.json", qc_payload)
+    qc_path = settings.paths.outputs_dir / "qc" / "models.json"
+    write_json(qc_path, qc_payload)
 
-    manifest = {
-        "stage": "models",
-        "status": "completed",
-        "timestamp": context.now_iso(),
-        "output": str(output_path),
-    }
-    write_json(manifest_path, manifest)
-    return qc_payload
+    result = StageResult(
+        name="models",
+        status="completed",
+        outputs=[str(output_path)],
+        qc_path=str(qc_path),
+        stats=qc_payload,
+        inputs_hash=inputs_hash,
+    )
+    write_stage_manifest(manifest_path, result)
+    return result
+
+
+def run_regressions(context: PipelineContext, force: bool = False) -> StageResult:
+    return run_models(context, force=force)
+
+
+def run_classifier(context: PipelineContext, force: bool = False) -> StageResult:
+    return run_models(context, force=force)

@@ -13,11 +13,14 @@ def test_doctor_creates_dirs(tmp_path: Path) -> None:
         """
 [sec]
 user_agent = "Test Researcher (test@example.com)"
-requests_per_second = 5
+max_requests_per_second = 5
 
 [paths]
 data_dir = "{data_dir}"
 outputs_dir = "{outputs_dir}"
+
+[runtime]
+offline = true
 """.format(
             data_dir=tmp_path / "data",
             outputs_dir=tmp_path / "outputs",
@@ -30,4 +33,4 @@ outputs_dir = "{outputs_dir}"
     qc = run_doctor(context)
     assert Path(settings.paths.raw_dir).exists()
     assert Path(settings.paths.processed_dir).exists()
-    assert qc["warnings"] == []
+    assert any("offline mode" in warning for warning in qc.warnings)

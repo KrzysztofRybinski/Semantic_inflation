@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+import os
 from pathlib import Path
 from typing import Any
 
@@ -15,12 +16,15 @@ from semantic_inflation.paths import repo_root
 class PathsSettings(BaseModel):
     data_dir: Path = Path("data")
     outputs_dir: Path = Path("outputs")
+    cache_dir: Path | None = None
     raw_dir: Path | None = None
     interim_dir: Path | None = None
     processed_dir: Path | None = None
 
     @model_validator(mode="after")
     def _populate_paths(self) -> "PathsSettings":
+        if self.cache_dir is None:
+            self.cache_dir = self.data_dir / "cache"
         if self.raw_dir is None:
             self.raw_dir = self.data_dir / "raw"
         if self.interim_dir is None:
@@ -37,20 +41,37 @@ class ProjectSettings(BaseModel):
 
 
 class SecSettings(BaseModel):
-    user_agent: str = Field(..., description="SEC User-Agent with contact info.")
-    requests_per_second: float = 10.0
-    use_bulk_submissions: bool = True
-    use_bulk_companyfacts: bool = True
+    user_agent_env: str = "SEC_USER_AGENT"
+    user_agent: str | None = Field(
+        default=None, description="SEC User-Agent with contact info."
+    )
+    max_requests_per_second: float = 8.0
+    concurrent_downloads: int = 4
+    use_submissions_api: bool = True
+    download_primary_html_only: bool = True
 
     @field_validator("user_agent")
     @classmethod
-    def _require_user_agent(cls, value: str) -> str:
-        if not value or value.strip().lower() in {"required", "changeme", "todo"}:
+    def _normalize_user_agent(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        if not value.strip() or value.strip().lower() in {"required", "changeme", "todo"}:
             raise ValueError("SEC user_agent must be set with contact info.")
         return value
 
+    def resolved_user_agent(self) -> str:
+        env_value = os.getenv(self.user_agent_env, "")
+        resolved = self.user_agent or env_value
+        if not resolved or resolved.strip().lower() in {"required", "changeme", "todo"}:
+            raise ValueError(
+                f"SEC user agent not set. Provide {self.user_agent_env} env var or "
+                "set sec.user_agent in config."
+            )
+        return resolved
+
 
 class DictionarySettings(BaseModel):
+    dict_path: Path = Path("semantic_inflation/resources/dictionaries_v1.toml")
     env_tokens_path: Path = Path("assets/dicts/environment_tokens.txt")
     aspiration_markers_path: Path = Path("assets/dicts/aspiration_markers.txt")
     kpi_units_path: Path = Path("assets/dicts/kpi_units.txt")
@@ -81,6 +102,7 @@ class RuntimeSettings(BaseModel):
     chunk_size: int = 100_000
     max_workers: int = 4
     request_timeout_seconds: int = 60
+    offline: bool = False
 
 
 class PipelineSecSettings(BaseModel):
@@ -91,16 +113,36 @@ class PipelineSecSettings(BaseModel):
 class PipelineGhgrpSettings(BaseModel):
     fixture_path: Path = Path("data/fixtures/ghgrp_sample.csv")
     source_url: str | None = None
+    parent_companies_url: str | None = None
+    emissions_url: str | None = None
+    years: list[int] | None = None
 
 
 class PipelineEchoSettings(BaseModel):
     fixture_path: Path = Path("data/fixtures/echo_sample.csv")
     source_url: str | None = None
+    exporter_url: str | None = None
+    schema_fields: list[str] = Field(default_factory=list)
+
+
+class LinkageSettings(BaseModel):
+    fuzzy_threshold_high: int = 95
+    fuzzy_threshold_medium: int = 90
+    manual_overrides_path: Path = Path("assets/manual_overrides/parent_to_cik.csv")
+
+
+class AnalysisSettings(BaseModel):
+    horizons: list[int] = Field(default_factory=lambda: [1, 2])
+    classifier_seed: int = 42
+    classifier_test_fraction: float = 0.2
+    cluster_by: str = "firm"
+    firm_fixed_effects: bool = True
+    year_fixed_effects: bool = True
 
 
 class PipelineSettings(BaseModel):
     mode: str = "full"
-    cik_source: str = "ghgrp_matched"
+    sample_frame: str = "ghgrp_matched"
     sec: PipelineSecSettings = Field(default_factory=PipelineSecSettings)
     ghgrp: PipelineGhgrpSettings = Field(default_factory=PipelineGhgrpSettings)
     echo: PipelineEchoSettings = Field(default_factory=PipelineEchoSettings)
@@ -120,6 +162,8 @@ class Settings(BaseSettings):
     text: TextSettings = Field(default_factory=TextSettings)
     runtime: RuntimeSettings = Field(default_factory=RuntimeSettings)
     pipeline: PipelineSettings = Field(default_factory=PipelineSettings)
+    linkage: LinkageSettings = Field(default_factory=LinkageSettings)
+    analysis: AnalysisSettings = Field(default_factory=AnalysisSettings)
 
     def resolved_paths(self) -> dict[str, str]:
         return {
@@ -128,6 +172,7 @@ class Settings(BaseSettings):
             "interim_dir": str(self.paths.interim_dir),
             "processed_dir": str(self.paths.processed_dir),
             "outputs_dir": str(self.paths.outputs_dir),
+            "cache_dir": str(self.paths.cache_dir),
         }
 
 
