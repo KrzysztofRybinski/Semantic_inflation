@@ -37,6 +37,11 @@ Run the full pipeline (preflight checks → SEC → GHGRP → ECHO → linkage �
 python -m semantic_inflation run-all --config configs/pipeline.toml
 ```
 
+> **Note:** `configs/pipeline.toml` points `pipeline.sec.filings_index_path` at the
+> sample fixture in `data/fixtures/filings_index.csv`. If you want to run against
+> real SEC filings, generate a filings index CSV and update the config to point at
+> your `data/raw/sec/filings_index.csv` (or another path).
+
 Run the preflight doctor checks (creates missing directories, cleans zero-byte files):
 
 ```bash

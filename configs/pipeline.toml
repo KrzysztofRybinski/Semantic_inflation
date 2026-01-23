@@ -18,7 +18,7 @@ mode = "full"
 cik_source = "ghgrp_matched"
 
 [pipeline.sec]
-filings_index_path = "data/raw/sec/filings_index.csv"
+filings_index_path = "data/fixtures/filings_index.csv"
 
 [pipeline.ghgrp]
 fixture_path = "data/fixtures/ghgrp_sample.csv"
