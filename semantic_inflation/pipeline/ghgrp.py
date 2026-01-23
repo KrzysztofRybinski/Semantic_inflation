@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+import re
 from typing import Any
 import zipfile
 from urllib.parse import urljoin
@@ -28,12 +29,17 @@ def _resolve_path(path: str | Path, repo_root: Path) -> Path:
     return p if p.is_absolute() else repo_root / p
 
 
+def _normalize_column(value: str) -> str:
+    return " ".join(re.findall(r"[a-z0-9]+", value.lower()))
+
+
 def _find_column(columns: list[str], keywords: list[str]) -> str | None:
-    lower_cols = {col.lower(): col for col in columns}
-    for keyword in keywords:
-        for col_lower, original in lower_cols.items():
-            if keyword in col_lower:
-                return original
+    normalized_columns = {col: _normalize_column(col) for col in columns}
+    normalized_keywords = [_normalize_column(keyword) for keyword in keywords]
+    for keyword in normalized_keywords:
+        for col, normalized in normalized_columns.items():
+            if keyword and keyword in normalized:
+                return col
     return None
 
 
