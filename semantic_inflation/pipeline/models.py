@@ -26,6 +26,13 @@ def _safe_series(df: pd.DataFrame, name: str, default: float = 0.0) -> pd.Series
     return pd.Series([default] * len(df))
 
 
+def _safe_r2(results: sm.regression.linear_model.RegressionResultsWrapper) -> float | None:
+    centered_tss = results.centered_tss
+    if centered_tss is None or np.isclose(centered_tss, 0.0):
+        return None
+    return 1.0 - (results.ssr / centered_tss)
+
+
 def run_models(context: PipelineContext, force: bool = False) -> StageResult:
     settings = context.settings
     output_path = settings.paths.outputs_dir / "results" / "models_summary.json"
@@ -78,12 +85,12 @@ def run_models(context: PipelineContext, force: bool = False) -> StageResult:
         "ols": {
             "params": results.params.to_dict(),
             "pvalues": results.pvalues.to_dict(),
-            "r2": results.rsquared,
+            "r2": _safe_r2(results),
         },
         "placebo": {
             "params": placebo.params.to_dict(),
             "pvalues": placebo.pvalues.to_dict(),
-            "r2": placebo.rsquared,
+            "r2": _safe_r2(placebo),
         },
         "classifier": classifier_summary,
     }
