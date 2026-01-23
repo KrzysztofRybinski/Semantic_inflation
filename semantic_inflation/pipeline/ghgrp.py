@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+import hashlib
 import re
 from typing import Any
 import zipfile
@@ -89,7 +90,7 @@ def parse_ghgrp_parent_companies(xlsb_path: Path, suffixes: set[str]) -> pd.Data
     return parent_df
 
 
-def _extract_summary_table(zip_path: Path, extract_dir: Path) -> Path:
+def _extract_summary_tables(zip_path: Path, extract_dir: Path) -> list[Path]:
     with zipfile.ZipFile(zip_path) as archive:
         candidates = [
             name
@@ -109,12 +110,20 @@ def _extract_summary_table(zip_path: Path, extract_dir: Path) -> Path:
             size = archive.getinfo(name).file_size
             scored.append((score, size, name))
         scored.sort(reverse=True)
-        chosen = scored[0][2]
         extract_dir.mkdir(parents=True, exist_ok=True)
-        extracted_path = extract_dir / Path(chosen).name
-        with archive.open(chosen) as handle:
-            extracted_path.write_bytes(handle.read())
-    return extracted_path
+        extracted_paths: list[Path] = []
+        for _, _, name in scored:
+            target_name = Path(name).name
+            extracted_path = extract_dir / target_name
+            if extracted_path.exists():
+                suffix = extracted_path.suffix
+                stem = extracted_path.stem
+                digest = hashlib.sha1(name.encode("utf-8")).hexdigest()[:8]
+                extracted_path = extract_dir / f"{stem}_{digest}{suffix}"
+            with archive.open(name) as handle:
+                extracted_path.write_bytes(handle.read())
+            extracted_paths.append(extracted_path)
+    return extracted_paths
 
 
 def _detect_header_row(preview: pd.DataFrame, keywords: list[str]) -> int | None:
@@ -158,11 +167,9 @@ def _read_summary_table(extracted_path: Path) -> pd.DataFrame:
     return pd.read_excel(excel_file, sheet_name=0)
 
 
-def parse_ghgrp_facility_year(
-    zip_path: Path, start_year: int, end_year: int, extract_dir: Path
+def _build_facility_year_from_df(
+    df: pd.DataFrame, start_year: int, end_year: int
 ) -> pd.DataFrame:
-    extracted_path = _extract_summary_table(zip_path, extract_dir)
-    df = _read_summary_table(extracted_path)
     if isinstance(df.columns, pd.MultiIndex):
         df.columns = [
             " ".join([str(part) for part in column if str(part) != "nan"]).strip()
@@ -254,6 +261,32 @@ def parse_ghgrp_facility_year(
     return long_df[
         ["ghgrp_facility_id", "reporting_year", "facility_name", "emissions_mtco2e", "frs_id"]
     ]
+
+
+def parse_ghgrp_facility_year(
+    zip_path: Path, start_year: int, end_year: int, extract_dir: Path
+) -> pd.DataFrame:
+    extracted_paths = _extract_summary_tables(zip_path, extract_dir)
+    best_df = None
+    best_rows = -1
+    errors: list[str] = []
+    for extracted_path in extracted_paths:
+        try:
+            df = _read_summary_table(extracted_path)
+            candidate_df = _build_facility_year_from_df(df, start_year, end_year)
+        except (ValueError, KeyError, pd.errors.ParserError) as exc:
+            errors.append(f"{extracted_path.name}: {exc}")
+            continue
+        rows = len(candidate_df)
+        if rows > best_rows:
+            best_rows = rows
+            best_df = candidate_df
+        if rows >= 50_000:
+            return candidate_df
+    if best_df is not None:
+        return best_df
+    details = f" Details: {', '.join(errors)}" if errors else ""
+    raise ValueError(f"Unable to parse GHGRP data summary tables.{details}")
 
 
 def _merge_frs_ids(
@@ -384,7 +417,11 @@ def download_ghgrp(context: PipelineContext, force: bool = False) -> StageResult
                 f"Reporting year {settings.project.end_year} not present in GHGRP data.{suffix}"
             )
         if len(facility_df) < 50_000:
-            raise ValueError("GHGRP facility-year table is unexpectedly small.")
+            warnings.append(
+                "GHGRP facility-year table has fewer than 50,000 rows. "
+                "This can happen when the EPA data summary changes structure; "
+                "verify the data summary URL or consider using the fixture."
+            )
 
         if frs_share < 0.8:
             missing_frs = facility_df[facility_df["frs_id"].isna()][
