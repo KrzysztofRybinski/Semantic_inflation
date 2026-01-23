@@ -113,6 +113,12 @@ def _cmd_run_all(args: argparse.Namespace) -> int:
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="semantic_inflation")
+    config_parent = argparse.ArgumentParser(add_help=False)
+    config_parent.add_argument(
+        "--config",
+        default=argparse.SUPPRESS,
+        help="Path to TOML config file",
+    )
     parser.add_argument(
         "--config",
         default=str(repo_root() / "configs" / "default.toml"),
@@ -121,30 +127,49 @@ def build_parser() -> argparse.ArgumentParser:
 
     sub = parser.add_subparsers(dest="command", required=True)
 
-    p_toy = sub.add_parser("toy", help="Run feature extraction on a small fixture")
+    p_toy = sub.add_parser(
+        "toy",
+        help="Run feature extraction on a small fixture",
+        parents=[config_parent],
+    )
     p_toy.set_defaults(func=_cmd_toy)
 
-    p_feat = sub.add_parser("features", help="Extract features from local filing files")
+    p_feat = sub.add_parser(
+        "features",
+        help="Extract features from local filing files",
+        parents=[config_parent],
+    )
     p_feat.add_argument("--input", nargs="+", required=True, help="Input HTML/text files")
     p_feat.add_argument("--output", help="Optional JSONL output path")
     p_feat.set_defaults(func=_cmd_features)
 
     p_extract = sub.add_parser(
-        "extract-text", help="Extract clean text from HTML filings for debugging"
+        "extract-text",
+        help="Extract clean text from HTML filings for debugging",
+        parents=[config_parent],
     )
     p_extract.add_argument("--input", required=True, help="Input HTML/text file")
     p_extract.add_argument("--output", help="Optional output path for extracted text")
     p_extract.set_defaults(func=_cmd_extract_text)
 
-    p_config = sub.add_parser("config", help="Print resolved configuration")
+    p_config = sub.add_parser(
+        "config",
+        help="Print resolved configuration",
+        parents=[config_parent],
+    )
     p_config.set_defaults(func=_cmd_config)
 
-    p_doctor = sub.add_parser("doctor", help="Run preflight checks and safe fixes")
+    p_doctor = sub.add_parser(
+        "doctor",
+        help="Run preflight checks and safe fixes",
+        parents=[config_parent],
+    )
     p_doctor.set_defaults(func=_cmd_doctor)
 
     p_run_all = sub.add_parser(
         "run-all",
         help="Run the full semantic inflation research pipeline",
+        parents=[config_parent],
     )
     p_run_all.set_defaults(func=_cmd_run_all)
 
