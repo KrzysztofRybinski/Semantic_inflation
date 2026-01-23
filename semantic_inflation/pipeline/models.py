@@ -33,6 +33,10 @@ def _safe_r2(results: sm.regression.linear_model.RegressionResultsWrapper) -> fl
     return 1.0 - (results.ssr / centered_tss)
 
 
+def _has_variation(series: pd.Series) -> bool:
+    return series.nunique(dropna=True) > 1
+
+
 def run_models(context: PipelineContext, force: bool = False) -> StageResult:
     settings = context.settings
     output_path = settings.paths.outputs_dir / "results" / "models_summary.json"
@@ -53,25 +57,63 @@ def run_models(context: PipelineContext, force: bool = False) -> StageResult:
     emissions = _safe_series(panel, "emissions_mtco2e")
     enforcement = _safe_series(panel, "enforcement_action_count")
 
-    X = sm.add_constant(pd.DataFrame({"emissions_mtco2e": emissions}))
-    model = sm.OLS(si, X, missing="drop")
-    results = model.fit()
-
-    placebo = sm.OLS(si.sample(frac=1.0, random_state=42).reset_index(drop=True), X).fit()
+    warnings: list[str] = []
+    can_fit_ols = len(panel) >= 2 and _has_variation(si)
+    if can_fit_ols:
+        X = sm.add_constant(pd.DataFrame({"emissions_mtco2e": emissions}))
+        model = sm.OLS(si, X, missing="drop")
+        results = model.fit()
+        placebo = sm.OLS(si.sample(frac=1.0, random_state=42).reset_index(drop=True), X).fit()
+        ols_summary = {
+            "params": results.params.to_dict(),
+            "pvalues": results.pvalues.to_dict(),
+            "r2": _safe_r2(results),
+        }
+        placebo_summary = {
+            "params": placebo.params.to_dict(),
+            "pvalues": placebo.pvalues.to_dict(),
+            "r2": _safe_r2(placebo),
+        }
+    else:
+        warnings.append(
+            "OLS skipped because the panel has fewer than 2 rows or no variation in the target."
+        )
+        ols_summary = {
+            "params": None,
+            "pvalues": None,
+            "r2": None,
+            "note": "OLS skipped due to insufficient variation in si_simple.",
+        }
+        placebo_summary = {
+            "params": None,
+            "pvalues": None,
+            "r2": None,
+            "note": "Placebo regression skipped because OLS was skipped.",
+        }
 
     clf_target = (enforcement > 0).astype(int)
     clf_features = pd.DataFrame({"si_simple": si, "emissions_mtco2e": emissions})
     class_counts = clf_target.value_counts().to_dict()
-    if len(class_counts) > 1:
-        clf = LogisticRegression(max_iter=1000)
-        clf.fit(clf_features, clf_target)
-        preds = clf.predict_proba(clf_features)[:, 1]
-        auc = roc_auc_score(clf_target, preds)
-        classifier_summary = {
-            "coef": clf.coef_.tolist(),
-            "intercept": clf.intercept_.tolist(),
-            "auc": auc,
-        }
+    if len(class_counts) > 1 and len(clf_target) >= 2:
+        try:
+            clf = LogisticRegression(max_iter=1000)
+            clf.fit(clf_features, clf_target)
+            preds = clf.predict_proba(clf_features)[:, 1]
+            auc = roc_auc_score(clf_target, preds)
+            classifier_summary = {
+                "coef": clf.coef_.tolist(),
+                "intercept": clf.intercept_.tolist(),
+                "auc": auc,
+            }
+        except ValueError as exc:
+            auc = None
+            warnings.append(f"Classifier skipped: {exc}")
+            classifier_summary = {
+                "coef": None,
+                "intercept": None,
+                "auc": auc,
+                "note": "Classifier skipped due to insufficient class balance.",
+            }
     else:
         auc = None
         classifier_summary = {
@@ -82,16 +124,8 @@ def run_models(context: PipelineContext, force: bool = False) -> StageResult:
         }
 
     summary = {
-        "ols": {
-            "params": results.params.to_dict(),
-            "pvalues": results.pvalues.to_dict(),
-            "r2": _safe_r2(results),
-        },
-        "placebo": {
-            "params": placebo.params.to_dict(),
-            "pvalues": placebo.pvalues.to_dict(),
-            "r2": _safe_r2(placebo),
-        },
+        "ols": ols_summary,
+        "placebo": placebo_summary,
         "classifier": classifier_summary,
     }
 
@@ -112,6 +146,7 @@ def run_models(context: PipelineContext, force: bool = False) -> StageResult:
         status="completed",
         outputs=[str(output_path)],
         qc_path=str(qc_path),
+        warnings=warnings,
         stats=qc_payload,
         inputs_hash=inputs_hash,
     )
