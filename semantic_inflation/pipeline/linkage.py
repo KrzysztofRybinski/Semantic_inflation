@@ -30,7 +30,7 @@ def build_linkage(context: PipelineContext, force: bool = False) -> StageResult:
         )
 
     ghgrp_path = settings.paths.processed_dir / "ghgrp.parquet"
-    echo_path = settings.paths.processed_dir / "echo.parquet"
+    echo_path = settings.paths.processed_dir / "echo_facility_year.parquet"
 
     ghgrp = pd.read_parquet(ghgrp_path)
     echo = pd.read_parquet(echo_path)

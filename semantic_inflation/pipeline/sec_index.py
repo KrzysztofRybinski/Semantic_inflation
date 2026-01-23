@@ -8,12 +8,10 @@ from pathlib import Path
 import random
 import re
 import time
-from typing import Any, Iterable
+from typing import Any
 
 import httpx
 import pandas as pd
-from rapidfuzz import fuzz, process
-
 from semantic_inflation.pipeline.context import PipelineContext
 from semantic_inflation.pipeline.downloads import download_with_cache, sha256_bytes, sha256_file
 from semantic_inflation.pipeline.io import write_json
@@ -69,55 +67,6 @@ class FilingCandidate:
 def _resolve_path(path: str | Path, repo_root: Path) -> Path:
     p = Path(path)
     return p if p.is_absolute() else repo_root / p
-
-
-def _load_suffixes(path: Path) -> set[str]:
-    if not path.exists():
-        return set()
-    return {
-        line.strip().upper()
-        for line in path.read_text(encoding="utf-8").splitlines()
-        if line.strip()
-    }
-
-
-def _normalize_name(name: str, suffixes: set[str]) -> str:
-    cleaned = re.sub(r"[^\w\s]", " ", name.upper())
-    tokens = [tok for tok in cleaned.split() if tok and tok not in suffixes]
-    return " ".join(tokens)
-
-
-def _find_column(columns: Iterable[str], keywords: list[str]) -> str | None:
-    lower_cols = {col.lower(): col for col in columns}
-    for keyword in keywords:
-        for col_lower, original in lower_cols.items():
-            if keyword in col_lower:
-                return original
-    return None
-
-
-def _load_parent_companies(path: Path) -> pd.DataFrame:
-    if not path.exists():
-        raise FileNotFoundError(f"Missing GHGRP parent companies file: {path}")
-    if path.suffix.lower() in {".xlsb", ".xls", ".xlsx"}:
-        return pd.read_excel(path, engine="pyxlsb" if path.suffix.lower() == ".xlsb" else None)
-    return pd.read_csv(path)
-
-
-def _load_sec_company_tickers(
-    url: str,
-    destination: Path,
-    headers: dict[str, str],
-    max_rps: float,
-    log_path: Path,
-) -> pd.DataFrame:
-    download_with_cache(url, destination, headers, max_rps, log_path)
-    payload = json.loads(destination.read_text(encoding="utf-8"))
-    if isinstance(payload, dict):
-        rows = list(payload.values())
-    else:
-        rows = payload
-    return pd.DataFrame(rows)
 
 
 def _extract_filings(payload: dict[str, Any], cik: str) -> list[FilingCandidate]:
@@ -256,8 +205,8 @@ def build_sec_filings_index(context: PipelineContext, force: bool = False) -> St
         raise ValueError("SEC filings index build requires network access (runtime.offline=true).")
 
     output_path = _resolve_path(settings.pipeline.sec.filings_index_path, context.repo_root)
-    crosswalk_path = settings.paths.processed_dir / "crosswalk_parent_to_cik.csv"
-    log_path = settings.paths.outputs_dir / "qc" / "download_log.jsonl"
+    universe_path = settings.paths.processed_dir / "cik_universe_ghgrp.csv"
+    log_path = settings.paths.raw_dir / "_manifests" / "sec_downloads.jsonl"
     inputs_hash = compute_inputs_hash(
         {
             "stage": "sec_index",
@@ -266,124 +215,29 @@ def build_sec_filings_index(context: PipelineContext, force: bool = False) -> St
         }
     )
     manifest_path = stage_manifest_path(settings.paths.outputs_dir, "sec_index")
-    if should_skip_stage(manifest_path, [output_path, crosswalk_path], inputs_hash, force):
+    if should_skip_stage(manifest_path, [output_path, universe_path], inputs_hash, force):
         return StageResult(
             name="sec_index",
             status="skipped",
-            outputs=[str(output_path), str(crosswalk_path)],
+            outputs=[str(output_path), str(universe_path)],
             inputs_hash=inputs_hash,
             stats={"skipped": True},
         )
 
-    suffixes = _load_suffixes(_resolve_path(settings.dictionaries.corp_suffixes_path, context.repo_root))
-    parent_path = _resolve_path(settings.pipeline.ghgrp.parent_companies_path, context.repo_root)
-    parent_df = _load_parent_companies(parent_path)
-    parent_name_col = _find_column(parent_df.columns, ["parent company", "parent_company"])
-    if not parent_name_col:
-        raise ValueError("Could not identify parent company name column in GHGRP file.")
-    parent_df = parent_df.rename(columns={parent_name_col: "parent_company_name_raw"})
-    parent_df["parent_company_name_norm"] = parent_df["parent_company_name_raw"].astype(str).map(
-        lambda value: _normalize_name(value, suffixes)
+    if not universe_path.exists():
+        raise FileNotFoundError("Missing cik_universe_ghgrp.csv; run parent_to_cik stage first.")
+
+    universe_df = pd.read_csv(universe_path, dtype={"cik": str})
+    matched_ciks = sorted(
+        {str(cik).zfill(10) for cik in universe_df["cik"].dropna().tolist()}
     )
 
     headers = {"User-Agent": settings.sec.resolved_user_agent()}
     rps = min(settings.sec.max_requests_per_second, 10.0)
-    sec_tickers_path = settings.paths.raw_dir / "sec" / "company_tickers.json"
-    sec_df = _load_sec_company_tickers(
-        settings.pipeline.sec.company_tickers_url,
-        sec_tickers_path,
-        headers,
-        rps,
-        log_path,
-    )
-    sec_name_col = _find_column(sec_df.columns, ["title", "name"])
-    if not sec_name_col:
-        raise ValueError("Could not find SEC company name column in company_tickers.json.")
-    sec_df["sec_name_norm"] = sec_df[sec_name_col].astype(str).map(
-        lambda value: _normalize_name(value, suffixes)
-    )
-
-    sec_choices = sec_df["sec_name_norm"].tolist()
-    matches: list[dict[str, Any]] = []
-    for raw, norm in (
-        parent_df[["parent_company_name_raw", "parent_company_name_norm"]]
-        .drop_duplicates()
-        .itertuples(index=False)
-    ):
-        match = process.extractOne(norm, sec_choices, scorer=fuzz.token_sort_ratio)
-        if match:
-            match_name, score, idx = match
-            sec_row = sec_df.iloc[idx]
-            matches.append(
-                {
-                    "parent_company_name_raw": raw,
-                    "parent_company_name_norm": norm,
-                    "matched_cik": str(sec_row.get("cik_str") or "").zfill(10),
-                    "matched_sec_name": sec_row.get(sec_name_col),
-                    "match_score": int(score),
-                    "match_method": "fuzzy",
-                    "match_tier": "high"
-                    if score >= settings.linkage.fuzzy_threshold_high
-                    else "medium"
-                    if score >= settings.linkage.fuzzy_threshold_medium
-                    else "low",
-                    "manual_override": False,
-                }
-            )
-        else:
-            matches.append(
-                {
-                    "parent_company_name_raw": raw,
-                    "parent_company_name_norm": norm,
-                    "matched_cik": "",
-                    "matched_sec_name": "",
-                    "match_score": 0,
-                    "match_method": "unmatched",
-                    "match_tier": "low",
-                    "manual_override": False,
-                }
-            )
-
-    overrides_path = _resolve_path(settings.linkage.manual_overrides_path, context.repo_root)
-    if overrides_path.exists():
-        overrides = pd.read_csv(overrides_path)
-        rename_map: dict[str, str] = {}
-        parent_col = _find_column(overrides.columns, ["parent_company_name_raw", "parent company"])
-        cik_col = _find_column(overrides.columns, ["matched_cik", "cik"])
-        if parent_col:
-            rename_map[parent_col] = "parent_company_name_raw"
-        if cik_col:
-            rename_map[cik_col] = "matched_cik"
-        if rename_map:
-            overrides = overrides.rename(columns=rename_map)
-        if "parent_company_name_raw" in overrides.columns and "matched_cik" in overrides.columns:
-            override_map = overrides.set_index("parent_company_name_raw")["matched_cik"].to_dict()
-            for row in matches:
-                override = override_map.get(row["parent_company_name_raw"])
-                if override:
-                    row["matched_cik"] = str(override).zfill(10)
-                    row["match_method"] = "manual"
-                    row["manual_override"] = True
-                    row["match_tier"] = "high"
-
-    crosswalk_df = pd.DataFrame(matches)
-    crosswalk_path.parent.mkdir(parents=True, exist_ok=True)
-    crosswalk_df.to_csv(crosswalk_path, index=False)
-
-    matched_ciks = sorted({row["matched_cik"] for row in matches if row["matched_cik"]})
-
     submissions_cache = settings.paths.raw_dir / "sec" / "submissions"
     candidates: list[FilingCandidate] = []
     for cik in matched_ciks:
-        candidates.extend(
-            _fetch_submissions(
-                cik,
-                submissions_cache,
-                headers,
-                rps,
-                log_path,
-            )
-        )
+        candidates.extend(_fetch_submissions(cik, submissions_cache, headers, rps, log_path))
 
     selected = _select_filings(
         candidates,
@@ -414,6 +268,10 @@ def build_sec_filings_index(context: PipelineContext, force: bool = False) -> St
 
     _assert_unique(rows)
     _validate_urls(rows)
+    if rows:
+        non_empty = sum(1 for row in rows if row.get("source_url"))
+        if non_empty / len(rows) < 0.99:
+            raise ValueError("SEC filings index has too many empty source URLs.")
     output_path.parent.mkdir(parents=True, exist_ok=True)
     fieldnames = [
         "cik",
@@ -437,9 +295,7 @@ def build_sec_filings_index(context: PipelineContext, force: bool = False) -> St
     qc_payload: dict[str, Any] = {
         "rows": len(rows),
         "output": str(output_path),
-        "crosswalk": str(crosswalk_path),
         "index_sha256": sha256_file(output_path) if output_path.exists() else None,
-        "crosswalk_sha256": sha256_file(crosswalk_path) if crosswalk_path.exists() else None,
         "run_timestamp": datetime.now(timezone.utc).isoformat(),
         "dictionary_sha256": sha256_file(
             _resolve_path(settings.dictionaries.dict_path, context.repo_root)
@@ -452,7 +308,7 @@ def build_sec_filings_index(context: PipelineContext, force: bool = False) -> St
             [row["source_url"] for row in rows if row.get("source_url")],
             headers,
             rps,
-            sample_size=20,
+            sample_size=25,
         )
         qc_payload["sampled_urls"] = sampled
         for entry in sampled:
@@ -469,7 +325,7 @@ def build_sec_filings_index(context: PipelineContext, force: bool = False) -> St
     result = StageResult(
         name="sec_index",
         status="completed",
-        outputs=[str(output_path), str(crosswalk_path)],
+        outputs=[str(output_path), str(universe_path)],
         qc_path=str(qc_path),
         stats=qc_payload,
         warnings=warnings,

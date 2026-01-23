@@ -1,0 +1,37 @@
+[project]
+start_year = 2010
+end_year = 2023
+filing_forms = ["10-K"]
+
+[pipeline]
+mode = "full"
+sample_frame = "ghgrp_matched"
+
+[pipeline.sec]
+filings_index_path = "data/raw/sec/filings_index.csv"
+build_index = true
+
+[pipeline.ghgrp]
+use_fixture = false
+data_sets_page = "https://www.epa.gov/ghgreporting/data-sets"
+data_summary_label = "Data Summary Spreadsheets"
+parent_companies_label = "Reported Parent Companies"
+cache_raw = true
+
+[pipeline.echo]
+case_downloads_url = "https://echo.epa.gov/files/echodownloads/case_downloads.zip"
+frs_downloads_url = "https://echo.epa.gov/files/echodownloads/frs_downloads.zip"
+cache_raw = true
+use_fixture = false
+
+[linkage]
+fuzzy_threshold_high = 95
+fuzzy_threshold_medium = 90
+manual_overrides_path = "assets/manual_overrides/parent_to_cik.csv"
+
+[sec]
+max_requests_per_second = 8
+
+[runtime]
+max_workers = 4
+chunk_size = 100000
