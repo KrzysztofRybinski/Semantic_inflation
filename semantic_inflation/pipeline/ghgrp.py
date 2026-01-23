@@ -172,9 +172,13 @@ def parse_ghgrp_facility_year(
     id_col = _find_column(df.columns.tolist(), ["facility id", "ghgrp facility id"])
     name_col = _find_column(df.columns.tolist(), ["facility name", "plant name"])
     frs_col = _find_column(df.columns.tolist(), ["frs", "registry"])
-    reporting_col = _find_column(
-        df.columns.tolist(), ["reporting year", "reporting_year", "year"]
-    )
+    reporting_col = _find_column(df.columns.tolist(), ["reporting year", "reporting_year"])
+    if not reporting_col:
+        normalized = {col: _normalize_column(col) for col in df.columns}
+        for col, normalized_name in normalized.items():
+            if normalized_name == "year":
+                reporting_col = col
+                break
     emissions_col = _find_column(df.columns.tolist(), ["co2e", "mtco2e", "emissions"])
 
     if not id_col:
