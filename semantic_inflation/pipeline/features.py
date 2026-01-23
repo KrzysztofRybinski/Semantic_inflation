@@ -7,7 +7,14 @@ from typing import Any
 import pandas as pd
 
 from semantic_inflation.pipeline.context import PipelineContext
-from semantic_inflation.pipeline.io_utils import is_complete, write_json
+from semantic_inflation.pipeline.io import write_json
+from semantic_inflation.pipeline.state import (
+    StageResult,
+    compute_inputs_hash,
+    should_skip_stage,
+    stage_manifest_path,
+    write_stage_manifest,
+)
 from semantic_inflation.text.features import compute_features_from_file
 
 
@@ -16,13 +23,21 @@ def _resolve_path(path: str | Path, repo_root: Path) -> Path:
     return p if p.is_absolute() else repo_root / p
 
 
-def compute_sec_features(context: PipelineContext) -> dict[str, Any]:
+def compute_sec_features(context: PipelineContext, force: bool = False) -> StageResult:
     settings = context.settings
-    manifest_path = settings.paths.outputs_dir / "manifests" / "sec_features.json"
     output_path = settings.paths.processed_dir / "sec_features.parquet"
-
-    if is_complete(manifest_path, [output_path]):
-        return {"skipped": True, "output": str(output_path)}
+    inputs_hash = compute_inputs_hash(
+        {"stage": "sec_features", "config": settings.model_dump(mode="json")}
+    )
+    manifest_path = stage_manifest_path(settings.paths.outputs_dir, "sec_features")
+    if should_skip_stage(manifest_path, [output_path], inputs_hash, force):
+        return StageResult(
+            name="sec_features",
+            status="skipped",
+            outputs=[str(output_path)],
+            inputs_hash=inputs_hash,
+            stats={"skipped": True},
+        )
 
     index_path = _resolve_path(settings.pipeline.sec.filings_index_path, context.repo_root)
     rows: list[dict[str, Any]] = []
@@ -70,13 +85,16 @@ def compute_sec_features(context: PipelineContext) -> dict[str, Any]:
         "columns": list(df.columns),
         "output": str(output_path),
     }
-    write_json(settings.paths.outputs_dir / "qc" / "sec_features_qc.json", qc_payload)
+    qc_path = settings.paths.outputs_dir / "qc" / "sec_features.json"
+    write_json(qc_path, qc_payload)
 
-    manifest = {
-        "stage": "sec_features",
-        "status": "completed",
-        "timestamp": context.now_iso(),
-        "output": str(output_path),
-    }
-    write_json(manifest_path, manifest)
-    return qc_payload
+    result = StageResult(
+        name="sec_features",
+        status="completed",
+        outputs=[str(output_path)],
+        qc_path=str(qc_path),
+        stats=qc_payload,
+        inputs_hash=inputs_hash,
+    )
+    write_stage_manifest(manifest_path, result)
+    return result

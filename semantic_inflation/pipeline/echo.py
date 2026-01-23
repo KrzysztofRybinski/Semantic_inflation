@@ -7,7 +7,14 @@ import pandas as pd
 import httpx
 
 from semantic_inflation.pipeline.context import PipelineContext
-from semantic_inflation.pipeline.io_utils import is_complete, write_json
+from semantic_inflation.pipeline.io import write_json
+from semantic_inflation.pipeline.state import (
+    StageResult,
+    compute_inputs_hash,
+    should_skip_stage,
+    stage_manifest_path,
+    write_stage_manifest,
+)
 
 
 def _resolve_path(path: str | Path, repo_root: Path) -> Path:
@@ -15,19 +22,28 @@ def _resolve_path(path: str | Path, repo_root: Path) -> Path:
     return p if p.is_absolute() else repo_root / p
 
 
-def download_echo(context: PipelineContext) -> dict[str, Any]:
+def download_echo(context: PipelineContext, force: bool = False) -> StageResult:
     settings = context.settings
-    manifest_path = settings.paths.outputs_dir / "manifests" / "echo_download.json"
     output_path = settings.paths.processed_dir / "echo.parquet"
-
-    if is_complete(manifest_path, [output_path]):
-        return {"skipped": True, "output": str(output_path)}
+    inputs_hash = compute_inputs_hash(
+        {"stage": "echo_download", "config": settings.model_dump(mode="json")}
+    )
+    manifest_path = stage_manifest_path(settings.paths.outputs_dir, "echo_download")
+    if should_skip_stage(manifest_path, [output_path], inputs_hash, force):
+        return StageResult(
+            name="echo_download",
+            status="skipped",
+            outputs=[str(output_path)],
+            inputs_hash=inputs_hash,
+            stats={"skipped": True},
+        )
 
     source_path = _resolve_path(settings.pipeline.echo.fixture_path, context.repo_root)
     if source_path.exists():
         df = pd.read_csv(source_path)
-    elif settings.pipeline.echo.source_url:
-        response = httpx.get(settings.pipeline.echo.source_url, timeout=60.0)
+    elif settings.pipeline.echo.exporter_url or settings.pipeline.echo.source_url:
+        source_url = settings.pipeline.echo.exporter_url or settings.pipeline.echo.source_url
+        response = httpx.get(source_url, timeout=60.0)
         response.raise_for_status()
         output_raw = settings.paths.raw_dir / "epa" / "echo" / "echo.csv"
         output_raw.parent.mkdir(parents=True, exist_ok=True)
@@ -44,13 +60,16 @@ def download_echo(context: PipelineContext) -> dict[str, Any]:
         "columns": list(df.columns),
         "output": str(output_path),
     }
-    write_json(settings.paths.outputs_dir / "qc" / "echo_qc.json", qc_payload)
+    qc_path = settings.paths.outputs_dir / "qc" / "echo_download.json"
+    write_json(qc_path, qc_payload)
 
-    manifest = {
-        "stage": "echo_download",
-        "status": "completed",
-        "timestamp": context.now_iso(),
-        "output": str(output_path),
-    }
-    write_json(manifest_path, manifest)
-    return qc_payload
+    result = StageResult(
+        name="echo_download",
+        status="completed",
+        outputs=[str(output_path)],
+        qc_path=str(qc_path),
+        stats=qc_payload,
+        inputs_hash=inputs_hash,
+    )
+    write_stage_manifest(manifest_path, result)
+    return result

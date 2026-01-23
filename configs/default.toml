@@ -4,16 +4,21 @@ end_year = 2024
 filing_forms = ["10-K"]
 
 [sec]
-user_agent = "Example Researcher (example@example.com)"
-requests_per_second = 10
-use_bulk_submissions = true
-use_bulk_companyfacts = true
+user_agent_env = "SEC_USER_AGENT"
+max_requests_per_second = 8
+concurrent_downloads = 4
+use_submissions_api = true
+download_primary_html_only = true
 
 [paths]
 data_dir = "data"
+raw_dir = "data/raw"
+processed_dir = "data/processed"
 outputs_dir = "outputs"
+cache_dir = "data/cache"
 
 [dictionaries]
+dict_path = "semantic_inflation/resources/dictionaries_v1.toml"
 env_tokens_path = "assets/dicts/environment_tokens.txt"
 aspiration_markers_path = "assets/dicts/aspiration_markers.txt"
 kpi_units_path = "assets/dicts/kpi_units.txt"
@@ -40,3 +45,4 @@ table_row_sep = "\n"
 chunk_size = 100000
 max_workers = 4
 request_timeout_seconds = 60
+offline = false

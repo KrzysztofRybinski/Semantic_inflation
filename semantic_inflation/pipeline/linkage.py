@@ -5,16 +5,29 @@ from typing import Any
 import pandas as pd
 
 from semantic_inflation.pipeline.context import PipelineContext
-from semantic_inflation.pipeline.io_utils import is_complete, write_json
+from semantic_inflation.pipeline.io import write_json
+from semantic_inflation.pipeline.state import (
+    StageResult,
+    compute_inputs_hash,
+    should_skip_stage,
+    stage_manifest_path,
+    write_stage_manifest,
+)
 
 
-def build_linkage(context: PipelineContext) -> dict[str, Any]:
+def build_linkage(context: PipelineContext, force: bool = False) -> StageResult:
     settings = context.settings
-    manifest_path = settings.paths.outputs_dir / "manifests" / "linkage.json"
     output_path = settings.paths.processed_dir / "linkage.parquet"
-
-    if is_complete(manifest_path, [output_path]):
-        return {"skipped": True, "output": str(output_path)}
+    inputs_hash = compute_inputs_hash({"stage": "linkage", "config": settings.model_dump(mode="json")})
+    manifest_path = stage_manifest_path(settings.paths.outputs_dir, "linkage")
+    if should_skip_stage(manifest_path, [output_path], inputs_hash, force):
+        return StageResult(
+            name="linkage",
+            status="skipped",
+            outputs=[str(output_path)],
+            inputs_hash=inputs_hash,
+            stats={"skipped": True},
+        )
 
     ghgrp_path = settings.paths.processed_dir / "ghgrp.parquet"
     echo_path = settings.paths.processed_dir / "echo.parquet"
@@ -44,13 +57,16 @@ def build_linkage(context: PipelineContext) -> dict[str, Any]:
         "join_key": "frs_id",
         "output": str(output_path),
     }
-    write_json(settings.paths.outputs_dir / "qc" / "linkage_qc.json", qc_payload)
+    qc_path = settings.paths.outputs_dir / "qc" / "linkage.json"
+    write_json(qc_path, qc_payload)
 
-    manifest = {
-        "stage": "linkage",
-        "status": "completed",
-        "timestamp": context.now_iso(),
-        "output": str(output_path),
-    }
-    write_json(manifest_path, manifest)
-    return qc_payload
+    result = StageResult(
+        name="linkage",
+        status="completed",
+        outputs=[str(output_path)],
+        qc_path=str(qc_path),
+        stats=qc_payload,
+        inputs_hash=inputs_hash,
+    )
+    write_stage_manifest(manifest_path, result)
+    return result
