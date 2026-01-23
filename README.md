@@ -36,7 +36,7 @@ uv run semantic-inflation features --input path/to/filing.html
 Set the SEC User-Agent with contact info before running any SEC steps:
 
 ```bash
-export SEC_USER_AGENT="Your Name (you@example.com)"
+export SEC_USER_AGENT="Krzysztof Rybinski (k.rybinski@vistula.edu.pl)"
 ```
 
 ### Full pipeline
