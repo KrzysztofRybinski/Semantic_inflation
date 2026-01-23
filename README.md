@@ -38,6 +38,10 @@ Set the SEC User-Agent with contact info before running any SEC steps:
 ```bash
 export SEC_USER_AGENT="Krzysztof Rybinski (k.rybinski@vistula.edu.pl)"
 ```
+### WINDOWS 
+### $env:SEC_USER_AGENT = "Krzysztof Rybinski (k.rybinski@vistula.edu.pl)"
+
+
 
 ### Full pipeline
 
