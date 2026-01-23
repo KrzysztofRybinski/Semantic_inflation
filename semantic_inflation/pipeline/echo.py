@@ -5,6 +5,8 @@ from typing import Any
 import zipfile
 
 import pandas as pd
+
+from semantic_inflation.epa.frs import build_ghgrp_to_frs, parse_frs_program_links
 from semantic_inflation.pipeline.context import PipelineContext
 from semantic_inflation.pipeline.downloads import download_with_cache, sha256_file
 from semantic_inflation.pipeline.io import write_json
@@ -22,9 +24,60 @@ def _resolve_path(path: str | Path, repo_root: Path) -> Path:
     return p if p.is_absolute() else repo_root / p
 
 
+def _find_column(columns: list[str], keywords: list[str]) -> str | None:
+    lower_cols = {col.lower(): col for col in columns}
+    for keyword in keywords:
+        for col_lower, original in lower_cols.items():
+            if keyword in col_lower:
+                return original
+    return None
+
+
+def _select_case_csv(archive: zipfile.ZipFile) -> str:
+    candidates = [name for name in archive.namelist() if name.lower().endswith(".csv")]
+    if not candidates:
+        raise FileNotFoundError("No CSV files found in case_downloads.zip")
+    preferred = [
+        name for name in candidates if "case" in name.lower() or "enf" in name.lower()
+    ]
+    return preferred[0] if preferred else candidates[0]
+
+
+def _parse_case_downloads(case_zip: Path, start_year: int, end_year: int) -> pd.DataFrame:
+    with zipfile.ZipFile(case_zip) as archive:
+        chosen = _select_case_csv(archive)
+        with archive.open(chosen) as handle:
+            df = pd.read_csv(handle, low_memory=False)
+
+    frs_col = _find_column(df.columns.tolist(), ["registry_id", "frs_id"])
+    date_col = _find_column(df.columns.tolist(), ["action_date", "enf_action_date", "case_date"])
+    penalty_col = _find_column(df.columns.tolist(), ["penalty", "civil_penalty"])
+    if not frs_col or not date_col:
+        raise ValueError("Unable to identify registry ID or action date columns in case data.")
+
+    df = df.rename(columns={frs_col: "frs_id", date_col: "action_date"})
+    if penalty_col:
+        df = df.rename(columns={penalty_col: "penalty_amount"})
+    else:
+        df["penalty_amount"] = 0.0
+
+    df["frs_id"] = df["frs_id"].astype(str)
+    df["action_date"] = pd.to_datetime(df["action_date"], errors="coerce")
+    df["reporting_year"] = df["action_date"].dt.year
+    df = df[df["reporting_year"].between(start_year, end_year, inclusive="both")]
+    df["penalty_amount"] = pd.to_numeric(df["penalty_amount"], errors="coerce").fillna(0.0)
+
+    grouped = (
+        df.groupby(["frs_id", "reporting_year"], as_index=False)
+        .agg(enforcement_action_count=("frs_id", "size"), penalty_amount=("penalty_amount", "sum"))
+        .copy()
+    )
+    return grouped
+
+
 def download_echo(context: PipelineContext, force: bool = False) -> StageResult:
     settings = context.settings
-    output_path = settings.paths.processed_dir / "echo.parquet"
+    output_path = settings.paths.processed_dir / "echo_facility_year.parquet"
     inputs_hash = compute_inputs_hash(
         {"stage": "echo_download", "config": settings.model_dump(mode="json")}
     )
@@ -39,7 +92,8 @@ def download_echo(context: PipelineContext, force: bool = False) -> StageResult:
         )
 
     source_path = _resolve_path(settings.pipeline.echo.fixture_path, context.repo_root)
-    if source_path.exists():
+    fixture_mode = settings.pipeline.echo.use_fixture and source_path.exists()
+    if fixture_mode:
         df = pd.read_csv(source_path)
     else:
         if settings.runtime.offline:
@@ -51,7 +105,7 @@ def download_echo(context: PipelineContext, force: bool = False) -> StageResult:
 
         headers = {"User-Agent": settings.sec.resolved_user_agent()}
         rps = min(settings.sec.max_requests_per_second, 10.0)
-        log_path = settings.paths.outputs_dir / "qc" / "download_log.jsonl"
+        log_path = settings.paths.raw_dir / "_manifests" / "echo_downloads.jsonl"
 
         raw_dir = settings.paths.raw_dir / "epa" / "echo"
         case_zip = raw_dir / "case_downloads.zip"
@@ -59,29 +113,46 @@ def download_echo(context: PipelineContext, force: bool = False) -> StageResult:
         download_with_cache(case_url, case_zip, headers, rps, log_path)
         download_with_cache(frs_url, frs_zip, headers, rps, log_path)
 
-        with zipfile.ZipFile(case_zip) as archive:
-            candidates = [
-                name
-                for name in archive.namelist()
-                if name.lower().endswith(".csv")
-            ]
-            if not candidates:
-                raise FileNotFoundError("No CSV files found in ICIS case_downloads.zip")
-            chosen = candidates[0]
-            extracted_path = raw_dir / chosen
-            extracted_path.parent.mkdir(parents=True, exist_ok=True)
-            with archive.open(chosen) as handle:
-                extracted_path.write_bytes(handle.read())
-            df = pd.read_csv(extracted_path)
+        df = _parse_case_downloads(
+            case_zip,
+            settings.project.start_year,
+            settings.project.end_year,
+        )
+
+        program_links = parse_frs_program_links(frs_zip)
+        program_links_path = settings.paths.processed_dir / "frs_program_links.parquet"
+        program_links_path.parent.mkdir(parents=True, exist_ok=True)
+        program_links.to_parquet(program_links_path, index=False)
+
+        ghgrp_facilities = settings.paths.processed_dir / "ghgrp_facility_year.parquet"
+        if ghgrp_facilities.exists():
+            ghgrp_df = pd.read_parquet(ghgrp_facilities)
+            ghgrp_to_frs = build_ghgrp_to_frs(program_links, ghgrp_df["ghgrp_facility_id"])
+            ghgrp_to_frs_path = settings.paths.processed_dir / "ghgrp_to_frs.parquet"
+            ghgrp_to_frs.to_parquet(ghgrp_to_frs_path, index=False)
 
     output_path.parent.mkdir(parents=True, exist_ok=True)
     df.to_parquet(output_path, index=False)
+
+    if not fixture_mode:
+        if len(df) < 2:
+            raise ValueError("ECHO enforcement table is unexpectedly small.")
+        frs_share = df["frs_id"].notna().mean()
+        if frs_share < 0.95:
+            raise ValueError("FRS ID coverage below expected threshold in ECHO enforcement data.")
+        years = sorted(df["reporting_year"].dropna().unique().tolist())
+        if len(years) < 2:
+            raise ValueError("ECHO enforcement table does not span multiple years.")
+    else:
+        years = sorted(df.get("reporting_year", pd.Series(dtype=int)).dropna().unique().tolist())
 
     qc_payload = {
         "rows": len(df),
         "columns": list(df.columns),
         "output": str(output_path),
         "output_sha256": sha256_file(output_path),
+        "year_range": {"min": min(years) if years else None, "max": max(years) if years else None},
+        "fixture_mode": fixture_mode,
     }
     qc_path = settings.paths.outputs_dir / "qc" / "echo_download.json"
     write_json(qc_path, qc_payload)

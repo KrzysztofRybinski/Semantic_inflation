@@ -50,10 +50,13 @@ def compute_sec_features(context: PipelineContext, force: bool = False) -> Stage
                 continue
             filing_year = int(row.get("filing_year") or 0)
             source_path = row.get("file_path")
+            primary_document = row.get("primary_document") or f"{cik}-{filing_year}.html"
             if source_path:
                 file_path = _resolve_path(source_path, context.repo_root)
             else:
-                file_path = settings.paths.raw_dir / "sec" / f"{cik}-{filing_year}.html"
+                file_path = (
+                    settings.paths.raw_dir / "sec" / "filings" / cik / str(filing_year) / primary_document
+                )
             if not file_path.exists():
                 raise FileNotFoundError(f"Missing SEC filing: {file_path}")
 

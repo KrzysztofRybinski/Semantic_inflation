@@ -11,6 +11,7 @@ from semantic_inflation.pipeline.ghgrp import download_ghgrp
 from semantic_inflation.pipeline.linkage import build_linkage
 from semantic_inflation.pipeline.models import run_classifier, run_regressions
 from semantic_inflation.pipeline.panel import build_panel
+from semantic_inflation.pipeline.parent_to_cik import build_parent_to_cik
 from semantic_inflation.pipeline.sec import download_sec_filings
 from semantic_inflation.pipeline.sec_index import build_sec_filings_index
 from semantic_inflation.text.clean_html import html_to_text
@@ -131,6 +132,14 @@ def _cmd_sec_index(args: argparse.Namespace) -> int:
     settings = load_settings(args.config)
     context = PipelineContext(settings)
     payload = build_sec_filings_index(context, force=args.force)
+    print(json.dumps(payload.to_dict(), indent=2, sort_keys=True))
+    return 0
+
+
+def _cmd_sec_universe(args: argparse.Namespace) -> int:
+    settings = load_settings(args.config)
+    context = PipelineContext(settings)
+    payload = build_parent_to_cik(context, force=args.force)
     print(json.dumps(payload.to_dict(), indent=2, sort_keys=True))
     return 0
 
@@ -268,6 +277,10 @@ def build_parser() -> argparse.ArgumentParser:
         "index", help="Build SEC filings index", parents=[config_parent]
     )
     p_sec_index.set_defaults(func=_cmd_sec_index)
+    p_sec_universe = sec_sub.add_parser(
+        "universe", help="Build GHGRP-matched CIK universe", parents=[config_parent]
+    )
+    p_sec_universe.set_defaults(func=_cmd_sec_universe)
     p_sec_features = sec_sub.add_parser(
         "features", help="Compute SEC features", parents=[config_parent]
     )
