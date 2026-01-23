@@ -5,12 +5,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-import time
-
-import httpx
-from tenacity import retry, retry_if_exception, stop_after_attempt, wait_exponential
-
 from semantic_inflation.pipeline.context import PipelineContext
+from semantic_inflation.pipeline.downloads import download_with_cache
 from semantic_inflation.pipeline.io import write_json
 from semantic_inflation.pipeline.state import (
     StageResult,
@@ -66,28 +62,6 @@ def _load_filings_index(context: PipelineContext) -> list[SecFilingRecord]:
     return records
 
 
-def _should_retry(exc: BaseException) -> bool:
-    if isinstance(exc, httpx.HTTPStatusError):
-        return exc.response.status_code in {429, 500, 502, 503, 504}
-    return isinstance(exc, httpx.TransportError)
-
-
-@retry(
-    retry=retry_if_exception(_should_retry),
-    stop=stop_after_attempt(5),
-    wait=wait_exponential(multiplier=1, min=1, max=16),
-    reraise=True,
-)
-def _download_with_throttle(url: str, destination: Path, headers: dict[str, str], rps: float) -> None:
-    destination.parent.mkdir(parents=True, exist_ok=True)
-    timeout = httpx.Timeout(60.0)
-    with httpx.Client(headers=headers, timeout=timeout) as client:
-        response = client.get(url)
-        response.raise_for_status()
-        destination.write_bytes(response.content)
-        time.sleep(max(0.1, 1.0 / max(rps, 0.1)))
-
-
 def download_sec_filings(context: PipelineContext, force: bool = False) -> StageResult:
     settings = context.settings
     raw_dir = settings.paths.raw_dir / "sec"
@@ -113,6 +87,7 @@ def download_sec_filings(context: PipelineContext, force: bool = False) -> Stage
 
     headers = {"User-Agent": settings.sec.resolved_user_agent()}
     rps = min(settings.sec.max_requests_per_second, 10.0)
+    log_path = settings.paths.outputs_dir / "qc" / "download_log.jsonl"
 
     downloaded: list[str] = []
     for record, dest in zip(filings, outputs):
@@ -124,7 +99,7 @@ def download_sec_filings(context: PipelineContext, force: bool = False) -> Stage
             downloaded.append(str(dest))
             continue
         if record.source_url:
-            _download_with_throttle(record.source_url, dest, headers, rps)
+            download_with_cache(record.source_url, dest, headers, rps, log_path)
             downloaded.append(str(dest))
             continue
         raise FileNotFoundError(

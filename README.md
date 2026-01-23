@@ -67,6 +67,7 @@ uv run semantic-inflation doctor --config configs/pipeline.toml
 
 ```bash
 uv run semantic-inflation sec download --config configs/pipeline.toml
+uv run semantic-inflation sec index --config configs/pipeline.toml
 uv run semantic-inflation sec features --config configs/pipeline.toml
 uv run semantic-inflation epa ghgrp download --config configs/pipeline.toml
 uv run semantic-inflation epa echo download --config configs/pipeline.toml
