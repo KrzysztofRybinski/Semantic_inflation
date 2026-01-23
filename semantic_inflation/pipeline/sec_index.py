@@ -207,11 +207,13 @@ def build_sec_filings_index(context: PipelineContext, force: bool = False) -> St
     output_path = _resolve_path(settings.pipeline.sec.filings_index_path, context.repo_root)
     universe_path = settings.paths.processed_dir / "cik_universe_ghgrp.csv"
     log_path = settings.paths.raw_dir / "_manifests" / "sec_downloads.jsonl"
+    universe_sha256 = sha256_file(universe_path) if universe_path.exists() else None
     inputs_hash = compute_inputs_hash(
         {
             "stage": "sec_index",
             "config": settings.model_dump(mode="json"),
             "output_path": str(output_path),
+            "universe_sha256": universe_sha256,
         }
     )
     manifest_path = stage_manifest_path(settings.paths.outputs_dir, "sec_index")
