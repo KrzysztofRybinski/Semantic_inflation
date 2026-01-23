@@ -54,10 +54,25 @@ def run_models(context: PipelineContext, force: bool = False) -> StageResult:
 
     clf_target = (enforcement > 0).astype(int)
     clf_features = pd.DataFrame({"si_simple": si, "emissions_mtco2e": emissions})
-    clf = LogisticRegression(max_iter=1000)
-    clf.fit(clf_features, clf_target)
-    preds = clf.predict_proba(clf_features)[:, 1]
-    auc = roc_auc_score(clf_target, preds) if len(set(clf_target)) > 1 else None
+    class_counts = clf_target.value_counts().to_dict()
+    if len(class_counts) > 1:
+        clf = LogisticRegression(max_iter=1000)
+        clf.fit(clf_features, clf_target)
+        preds = clf.predict_proba(clf_features)[:, 1]
+        auc = roc_auc_score(clf_target, preds)
+        classifier_summary = {
+            "coef": clf.coef_.tolist(),
+            "intercept": clf.intercept_.tolist(),
+            "auc": auc,
+        }
+    else:
+        auc = None
+        classifier_summary = {
+            "coef": None,
+            "intercept": None,
+            "auc": auc,
+            "note": "Classifier skipped because only one target class is present.",
+        }
 
     summary = {
         "ols": {
@@ -70,11 +85,7 @@ def run_models(context: PipelineContext, force: bool = False) -> StageResult:
             "pvalues": placebo.pvalues.to_dict(),
             "r2": placebo.rsquared,
         },
-        "classifier": {
-            "coef": clf.coef_.tolist(),
-            "intercept": clf.intercept_.tolist(),
-            "auc": auc,
-        },
+        "classifier": classifier_summary,
     }
 
     output_path.parent.mkdir(parents=True, exist_ok=True)
@@ -84,6 +95,7 @@ def run_models(context: PipelineContext, force: bool = False) -> StageResult:
         "rows": len(panel),
         "output": str(output_path),
         "auc": auc,
+        "class_counts": class_counts,
     }
     qc_path = settings.paths.outputs_dir / "qc" / "models.json"
     write_json(qc_path, qc_payload)
