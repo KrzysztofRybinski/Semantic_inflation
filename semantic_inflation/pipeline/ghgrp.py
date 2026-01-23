@@ -94,12 +94,22 @@ def _extract_summary_table(zip_path: Path, extract_dir: Path) -> Path:
         candidates = [
             name
             for name in archive.namelist()
-            if name.lower().endswith((".csv", ".xlsx", ".xls"))
+            if name.lower().endswith((".csv", ".xlsx", ".xls", ".xlsb"))
         ]
         if not candidates:
             raise FileNotFoundError("No readable tables found in GHGRP data summary zip.")
-        preferred = [name for name in candidates if "facility" in name.lower()]
-        chosen = preferred[0] if preferred else candidates[0]
+        scored: list[tuple[int, int, str]] = []
+        for name in candidates:
+            lower_name = name.lower()
+            score = 0
+            if "facility" in lower_name:
+                score += 2
+            if "data summary" in lower_name or "data_summary" in lower_name:
+                score += 1
+            size = archive.getinfo(name).file_size
+            scored.append((score, size, name))
+        scored.sort(reverse=True)
+        chosen = scored[0][2]
         extract_dir.mkdir(parents=True, exist_ok=True)
         extracted_path = extract_dir / Path(chosen).name
         with archive.open(chosen) as handle:
@@ -126,11 +136,26 @@ def _read_summary_table(extracted_path: Path) -> pd.DataFrame:
             return pd.read_csv(extracted_path, header=header_row, low_memory=False)
         return pd.read_csv(extracted_path, low_memory=False)
 
-    preview = pd.read_excel(extracted_path, header=None, nrows=25)
+    excel_file = pd.ExcelFile(extracted_path)
+    best_df = None
+    best_rows = -1
+    for sheet in excel_file.sheet_names:
+        preview = pd.read_excel(excel_file, sheet_name=sheet, header=None, nrows=25)
+        header_row = _detect_header_row(preview, keywords)
+        if header_row is None:
+            continue
+        df = pd.read_excel(excel_file, sheet_name=sheet, header=header_row)
+        if len(df) > best_rows:
+            best_rows = len(df)
+            best_df = df
+    if best_df is not None:
+        return best_df
+
+    preview = pd.read_excel(excel_file, sheet_name=0, header=None, nrows=25)
     header_row = _detect_header_row(preview, keywords)
     if header_row is not None and header_row != 0:
-        return pd.read_excel(extracted_path, header=header_row)
-    return pd.read_excel(extracted_path)
+        return pd.read_excel(excel_file, sheet_name=0, header=header_row)
+    return pd.read_excel(excel_file, sheet_name=0)
 
 
 def parse_ghgrp_facility_year(
