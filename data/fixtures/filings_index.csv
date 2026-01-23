@@ -1,2 +1,2 @@
-cik,filing_year,file_path
-0000320193,2023,data/fixtures/sample_filing.html
+cik,filing_year,source_url,file_path,form,filing_date,report_date,accession_number,primary_document,archive_dir,company_name_sec
+0000320193,2023,,data/fixtures/sample_filing.html,10-K,2023-11-03,2023-09-30,0000320193-23-000106,aapl-20230930.htm,000032019323000106,Apple Inc.

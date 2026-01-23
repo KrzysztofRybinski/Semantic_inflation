@@ -12,6 +12,7 @@ from semantic_inflation.pipeline.linkage import build_linkage
 from semantic_inflation.pipeline.models import run_classifier, run_regressions
 from semantic_inflation.pipeline.panel import build_panel
 from semantic_inflation.pipeline.sec import download_sec_filings
+from semantic_inflation.pipeline.sec_index import build_sec_filings_index
 from semantic_inflation.text.clean_html import html_to_text
 from semantic_inflation.text.features import compute_features_from_file
 
@@ -122,6 +123,14 @@ def _cmd_sec_download(args: argparse.Namespace) -> int:
     settings = load_settings(args.config)
     context = PipelineContext(settings)
     payload = download_sec_filings(context, force=args.force)
+    print(json.dumps(payload.to_dict(), indent=2, sort_keys=True))
+    return 0
+
+
+def _cmd_sec_index(args: argparse.Namespace) -> int:
+    settings = load_settings(args.config)
+    context = PipelineContext(settings)
+    payload = build_sec_filings_index(context, force=args.force)
     print(json.dumps(payload.to_dict(), indent=2, sort_keys=True))
     return 0
 
@@ -255,6 +264,10 @@ def build_parser() -> argparse.ArgumentParser:
         "download", help="Download SEC filings", parents=[config_parent]
     )
     p_sec_download.set_defaults(func=_cmd_sec_download)
+    p_sec_index = sec_sub.add_parser(
+        "index", help="Build SEC filings index", parents=[config_parent]
+    )
+    p_sec_index.set_defaults(func=_cmd_sec_index)
     p_sec_features = sec_sub.add_parser(
         "features", help="Compute SEC features", parents=[config_parent]
     )

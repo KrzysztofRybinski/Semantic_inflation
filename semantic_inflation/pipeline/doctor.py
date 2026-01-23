@@ -168,22 +168,30 @@ def run_doctor(context: PipelineContext, force: bool = False) -> StageResult:
                 )
             except Exception as exc:  # noqa: BLE001
                 errors.append(f"GHGRP parent companies fetch failed: {exc}")
-        if settings.pipeline.ghgrp.emissions_url:
+        if settings.pipeline.ghgrp.data_summary_url:
             try:
                 network_checks["ghgrp_emissions"] = _fetch_sample(
-                    settings.pipeline.ghgrp.emissions_url,
+                    settings.pipeline.ghgrp.data_summary_url,
                     sample_dir / "ghgrp_emissions.sample",
                 )
             except Exception as exc:  # noqa: BLE001
                 errors.append(f"GHGRP emissions fetch failed: {exc}")
-        if settings.pipeline.echo.exporter_url:
+        if settings.pipeline.echo.case_downloads_url:
             try:
                 network_checks["echo_exporter"] = _fetch_sample(
-                    settings.pipeline.echo.exporter_url,
+                    settings.pipeline.echo.case_downloads_url,
                     sample_dir / "echo_exporter.sample",
                 )
             except Exception as exc:  # noqa: BLE001
                 errors.append(f"ECHO exporter fetch failed: {exc}")
+        if settings.pipeline.echo.frs_downloads_url:
+            try:
+                network_checks["echo_frs"] = _fetch_sample(
+                    settings.pipeline.echo.frs_downloads_url,
+                    sample_dir / "echo_frs.sample",
+                )
+            except Exception as exc:  # noqa: BLE001
+                errors.append(f"ECHO FRS fetch failed: {exc}")
 
     qc_payload = {
         "created_dirs": created_dirs,
