@@ -340,12 +340,20 @@ def download_ghgrp(context: PipelineContext, force: bool = False) -> StageResult
     missing_frs_path = None
     frs_share = facility_df.get("frs_id", pd.Series(dtype=object)).notna().mean()
     if not fixture_mode:
+        if not years:
+            raise ValueError("No reporting years found in GHGRP data.")
         if settings.project.start_year not in years:
             warnings.append(
                 f"Reporting year {settings.project.start_year} not present in GHGRP data."
             )
         if settings.project.end_year not in years:
-            raise ValueError("Reporting year end_year not present in GHGRP data.")
+            available_range = None
+            if years:
+                available_range = f"{min(years)}-{max(years)}"
+            suffix = f" Available years: {available_range}." if available_range else ""
+            warnings.append(
+                f"Reporting year {settings.project.end_year} not present in GHGRP data.{suffix}"
+            )
         if len(facility_df) < 50_000:
             raise ValueError("GHGRP facility-year table is unexpectedly small.")
 
