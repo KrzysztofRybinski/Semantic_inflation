@@ -24,11 +24,16 @@ def _resolve_path(path: str | Path, repo_root: Path) -> Path:
     return p if p.is_absolute() else repo_root / p
 
 
+def _normalize_column(value: str) -> str:
+    return "".join(ch for ch in value.lower() if ch.isalnum())
+
+
 def _find_column(columns: list[str], keywords: list[str]) -> str | None:
-    lower_cols = {col.lower(): col for col in columns}
+    normalized_cols = {_normalize_column(col): col for col in columns}
     for keyword in keywords:
-        for col_lower, original in lower_cols.items():
-            if keyword in col_lower:
+        normalized_keyword = _normalize_column(keyword)
+        for normalized_col, original in normalized_cols.items():
+            if normalized_keyword and normalized_keyword in normalized_col:
                 return original
     return None
 
@@ -49,9 +54,39 @@ def _parse_case_downloads(case_zip: Path, start_year: int, end_year: int) -> pd.
         with archive.open(chosen) as handle:
             df = pd.read_csv(handle, low_memory=False)
 
-    frs_col = _find_column(df.columns.tolist(), ["registry_id", "frs_id"])
-    date_col = _find_column(df.columns.tolist(), ["action_date", "enf_action_date", "case_date"])
-    penalty_col = _find_column(df.columns.tolist(), ["penalty", "civil_penalty"])
+    frs_col = _find_column(
+        df.columns.tolist(),
+        [
+            "registry_id",
+            "registryid",
+            "frs_id",
+            "frsid",
+            "frs_registry_id",
+            "frs registry id",
+        ],
+    )
+    date_col = _find_column(
+        df.columns.tolist(),
+        [
+            "action_date",
+            "actiondate",
+            "enf_action_date",
+            "enfactiondate",
+            "enforcement_action_date",
+            "case_date",
+            "case_action_date",
+            "caseactiondate",
+        ],
+    )
+    penalty_col = _find_column(
+        df.columns.tolist(),
+        [
+            "penalty",
+            "civil_penalty",
+            "civilpenalty",
+            "penalty_amount",
+        ],
+    )
     if not frs_col or not date_col:
         raise ValueError("Unable to identify registry ID or action date columns in case data.")
 
