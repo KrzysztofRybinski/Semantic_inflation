@@ -34,13 +34,13 @@ python -m semantic_inflation features --input path/to/filing.html
 Run the full pipeline (preflight checks → SEC → GHGRP → ECHO → linkage → panel → models):
 
 ```bash
-python3 -m semantic_inflation run-all --config configs/pipeline.toml
+python -m semantic_inflation run-all --config configs/pipeline.toml
 ```
 
 Run the preflight doctor checks (creates missing directories, cleans zero-byte files):
 
 ```bash
-python3 -m semantic_inflation doctor --config configs/pipeline.toml
+python -m semantic_inflation doctor --config configs/pipeline.toml
 ```
 
 Pipeline outputs are written to `data/processed/` (parquet intermediates) and `outputs/` (QC + model results).
