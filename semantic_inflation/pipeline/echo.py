@@ -59,6 +59,8 @@ def _find_date_column(columns: list[str]) -> str | None:
         "final_action_date",
         "finalactiondate",
         "final action date",
+        "case_status_date",
+        "activity_status_date",
         "case_date",
         "case_action_date",
         "caseactiondate",
@@ -95,7 +97,9 @@ def _select_case_csv(archive: zipfile.ZipFile) -> str:
     return preferred[0] if preferred else candidates[0]
 
 
-def _parse_case_downloads(case_zip: Path, start_year: int, end_year: int) -> pd.DataFrame:
+def _parse_case_downloads(
+    case_zip: Path, start_year: int, end_year: int
+) -> tuple[pd.DataFrame, str]:
     with zipfile.ZipFile(case_zip) as archive:
         chosen = _select_case_csv(archive)
         with archive.open(chosen) as handle:
@@ -114,6 +118,7 @@ def _parse_case_downloads(case_zip: Path, start_year: int, end_year: int) -> pd.
             "registry identifier",
         ],
     )
+    frs_source = "registry_id"
     date_col = _find_date_column(df.columns.tolist())
     penalty_col = _find_column(
         df.columns.tolist(),
@@ -128,6 +133,18 @@ def _parse_case_downloads(case_zip: Path, start_year: int, end_year: int) -> pd.
         frs_col = _find_column_with_tokens(df.columns.tolist(), ["registry", "id"])
     if not frs_col:
         frs_col = _find_column_with_tokens(df.columns.tolist(), ["frs", "id"])
+    if not frs_col:
+        frs_col = _find_column(
+            df.columns.tolist(),
+            [
+                "case_number",
+                "casenumber",
+                "activity_id",
+                "activityid",
+            ],
+        )
+        if frs_col:
+            frs_source = "case_identifier"
     if not date_col:
         date_col = _find_date_column(df.columns.tolist())
     if not frs_col or not date_col:
@@ -154,7 +171,7 @@ def _parse_case_downloads(case_zip: Path, start_year: int, end_year: int) -> pd.
         .agg(enforcement_action_count=("frs_id", "size"), penalty_amount=("penalty_amount", "sum"))
         .copy()
     )
-    return grouped
+    return grouped, frs_source
 
 
 def download_echo(context: PipelineContext, force: bool = False) -> StageResult:
@@ -195,7 +212,7 @@ def download_echo(context: PipelineContext, force: bool = False) -> StageResult:
         download_with_cache(case_url, case_zip, headers, rps, log_path)
         download_with_cache(frs_url, frs_zip, headers, rps, log_path)
 
-        df = _parse_case_downloads(
+        df, frs_id_source = _parse_case_downloads(
             case_zip,
             settings.project.start_year,
             settings.project.end_year,
@@ -220,13 +237,14 @@ def download_echo(context: PipelineContext, force: bool = False) -> StageResult:
         if len(df) < 2:
             raise ValueError("ECHO enforcement table is unexpectedly small.")
         frs_share = df["frs_id"].notna().mean()
-        if frs_share < 0.95:
+        if frs_id_source == "registry_id" and frs_share < 0.95:
             raise ValueError("FRS ID coverage below expected threshold in ECHO enforcement data.")
         years = sorted(df["reporting_year"].dropna().unique().tolist())
         if len(years) < 2:
             raise ValueError("ECHO enforcement table does not span multiple years.")
     else:
         years = sorted(df.get("reporting_year", pd.Series(dtype=int)).dropna().unique().tolist())
+        frs_id_source = "fixture"
 
     qc_payload = {
         "rows": len(df),
@@ -235,6 +253,7 @@ def download_echo(context: PipelineContext, force: bool = False) -> StageResult:
         "output_sha256": sha256_file(output_path),
         "year_range": {"min": min(years) if years else None, "max": max(years) if years else None},
         "fixture_mode": fixture_mode,
+        "frs_id_source": frs_id_source,
     }
     qc_path = settings.paths.outputs_dir / "qc" / "echo_download.json"
     write_json(qc_path, qc_payload)
