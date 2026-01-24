@@ -97,13 +97,29 @@ def _select_case_csv(archive: zipfile.ZipFile) -> str:
     return preferred[0] if preferred else candidates[0]
 
 
+def _find_csv(archive: zipfile.ZipFile, keywords: list[str]) -> str | None:
+    candidates = [name for name in archive.namelist() if name.lower().endswith(".csv")]
+    normalized = [keyword.lower() for keyword in keywords]
+    for name in candidates:
+        lower_name = name.lower()
+        if all(keyword in lower_name for keyword in normalized):
+            return name
+    return None
+
+
 def _parse_case_downloads(
     case_zip: Path, start_year: int, end_year: int
 ) -> tuple[pd.DataFrame, str]:
     with zipfile.ZipFile(case_zip) as archive:
-        chosen = _select_case_csv(archive)
+        enforcement_csv = _find_csv(archive, ["case", "enforcements"])
+        facilities_csv = _find_csv(archive, ["case", "facilities"])
+        chosen = enforcement_csv or _select_case_csv(archive)
         with archive.open(chosen) as handle:
             df = pd.read_csv(handle, low_memory=False)
+        facilities_df = None
+        if facilities_csv:
+            with archive.open(facilities_csv) as handle:
+                facilities_df = pd.read_csv(handle, low_memory=False)
 
     frs_col = _find_column(
         df.columns.tolist(),
@@ -133,6 +149,49 @@ def _parse_case_downloads(
         frs_col = _find_column_with_tokens(df.columns.tolist(), ["registry", "id"])
     if not frs_col:
         frs_col = _find_column_with_tokens(df.columns.tolist(), ["frs", "id"])
+    if not frs_col and facilities_df is not None:
+        facilities_cols = facilities_df.columns.tolist()
+        facilities_activity_col = _find_column(
+            facilities_cols,
+            ["activity_id", "activity id"],
+        )
+        facilities_frs_col = _find_column(
+            facilities_cols,
+            [
+                "registry_id",
+                "registryid",
+                "frs_id",
+                "frsid",
+                "frs registry id",
+            ],
+        )
+        enforcement_activity_col = _find_column(
+            df.columns.tolist(),
+            ["activity_id", "activity id"],
+        )
+        if facilities_activity_col and facilities_frs_col and enforcement_activity_col:
+            facilities_subset = facilities_df[
+                [facilities_activity_col, facilities_frs_col]
+            ].copy()
+            facilities_subset = facilities_subset.rename(
+                columns={
+                    facilities_activity_col: "activity_id",
+                    facilities_frs_col: "frs_id",
+                }
+            )
+            facilities_subset["activity_id"] = facilities_subset["activity_id"].astype(str)
+            facilities_subset["frs_id"] = facilities_subset["frs_id"].astype(str)
+            enforcement_df = df.copy()
+            enforcement_df = enforcement_df.rename(
+                columns={enforcement_activity_col: "activity_id"}
+            )
+            enforcement_df["activity_id"] = enforcement_df["activity_id"].astype(str)
+            df = enforcement_df.merge(
+                facilities_subset,
+                on="activity_id",
+                how="left",
+            )
+            frs_col = "frs_id"
     if not frs_col:
         frs_col = _find_column(
             df.columns.tolist(),
