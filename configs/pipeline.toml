@@ -42,6 +42,9 @@ case_downloads_url = "https://echo.epa.gov/files/echodownloads/case_downloads.zi
 frs_downloads_url = "https://echo.epa.gov/files/echodownloads/frs_downloads.zip"
 schema_fields = ["FRS_ID", "ACTION_DATE", "PENALTY_AMOUNT", "VIOLATION_COUNT"]
 
+[runtime]
+offline = false
+
 [linkage]
 fuzzy_threshold_high = 95
 fuzzy_threshold_medium = 90

@@ -20,10 +20,18 @@ from semantic_inflation.text.features import compute_features_from_file
 SEC_SAMPLE_CIKS = ["0000320193", "0000051143", "0000789019"]
 
 
-def _fetch_sample(url: str, dest: Path, *, max_bytes: int = 50_000) -> dict[str, str]:
-    headers = {"Range": f"bytes=0-{max_bytes - 1}"}
+def _fetch_sample(
+    url: str,
+    dest: Path,
+    *,
+    headers: dict[str, str] | None = None,
+    max_bytes: int = 50_000,
+) -> dict[str, str]:
+    request_headers = {"Range": f"bytes=0-{max_bytes - 1}"}
+    if headers:
+        request_headers.update(headers)
     with httpx.Client(timeout=30.0) as client:
-        response = client.get(url, headers=headers)
+        response = client.get(url, headers=request_headers)
         response.raise_for_status()
         dest.parent.mkdir(parents=True, exist_ok=True)
         dest.write_bytes(response.content[:max_bytes])
@@ -159,12 +167,19 @@ def run_doctor(context: PipelineContext, force: bool = False) -> StageResult:
             network_checks["sec"] = _sec_sample(context, sample_dir)
         except Exception as exc:  # noqa: BLE001
             errors.append(f"SEC preflight failed: {exc}")
+        user_agent = None
+        try:
+            user_agent = settings.sec.resolved_user_agent()
+        except Exception:  # noqa: BLE001
+            user_agent = None
+        sample_headers = {"User-Agent": user_agent} if user_agent else None
 
         if settings.pipeline.ghgrp.parent_companies_url:
             try:
                 network_checks["ghgrp_parent"] = _fetch_sample(
                     settings.pipeline.ghgrp.parent_companies_url,
                     sample_dir / "ghgrp_parent_companies.sample",
+                    headers=sample_headers,
                 )
             except Exception as exc:  # noqa: BLE001
                 errors.append(f"GHGRP parent companies fetch failed: {exc}")
@@ -173,6 +188,7 @@ def run_doctor(context: PipelineContext, force: bool = False) -> StageResult:
                 network_checks["ghgrp_emissions"] = _fetch_sample(
                     settings.pipeline.ghgrp.data_summary_url,
                     sample_dir / "ghgrp_emissions.sample",
+                    headers=sample_headers,
                 )
             except Exception as exc:  # noqa: BLE001
                 errors.append(f"GHGRP emissions fetch failed: {exc}")
@@ -181,6 +197,7 @@ def run_doctor(context: PipelineContext, force: bool = False) -> StageResult:
                 network_checks["echo_exporter"] = _fetch_sample(
                     settings.pipeline.echo.case_downloads_url,
                     sample_dir / "echo_exporter.sample",
+                    headers=sample_headers,
                 )
             except Exception as exc:  # noqa: BLE001
                 errors.append(f"ECHO exporter fetch failed: {exc}")
@@ -189,6 +206,7 @@ def run_doctor(context: PipelineContext, force: bool = False) -> StageResult:
                 network_checks["echo_frs"] = _fetch_sample(
                     settings.pipeline.echo.frs_downloads_url,
                     sample_dir / "echo_frs.sample",
+                    headers=sample_headers,
                 )
             except Exception as exc:  # noqa: BLE001
                 errors.append(f"ECHO FRS fetch failed: {exc}")
