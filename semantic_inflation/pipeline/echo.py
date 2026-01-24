@@ -217,6 +217,11 @@ def download_echo(context: PipelineContext, force: bool = False) -> StageResult:
             settings.project.start_year,
             settings.project.end_year,
         )
+        if frs_id_source == "case_identifier":
+            raise ValueError(
+                "ECHO case downloads missing registry/FRS identifiers; "
+                "fallback case/activity IDs are not valid FRS join keys."
+            )
 
         program_links = parse_frs_program_links(frs_zip)
         program_links_path = settings.paths.processed_dir / "frs_program_links.parquet"
