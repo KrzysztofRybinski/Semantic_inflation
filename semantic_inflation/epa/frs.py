@@ -3,15 +3,21 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 import zipfile
+import re
 
 import pandas as pd
 
 
+def _normalize_column(value: str) -> str:
+    return re.sub(r"[^a-z0-9]+", "", value.lower())
+
+
 def _find_column(columns: list[str], keywords: list[str]) -> str | None:
-    lower_cols = {col.lower(): col for col in columns}
+    normalized_cols = {_normalize_column(col): col for col in columns}
     for keyword in keywords:
-        for col_lower, original in lower_cols.items():
-            if keyword in col_lower:
+        normalized_keyword = _normalize_column(keyword)
+        for col_norm, original in normalized_cols.items():
+            if normalized_keyword in col_norm:
                 return original
     return None
 
@@ -29,11 +35,26 @@ def parse_frs_program_links(zip_path: Path) -> pd.DataFrame:
         with archive.open(chosen) as handle:
             df = pd.read_csv(handle, low_memory=False)
 
-    frs_col = _find_column(df.columns.tolist(), ["registry_id", "frs_id"])
-    program_id_col = _find_column(df.columns.tolist(), ["program_sys_id", "program system id"])
-    acronym_col = _find_column(df.columns.tolist(), ["program_acronym", "program acronym"])
+    frs_col = _find_column(df.columns.tolist(), ["registry_id", "registry id", "frs_id", "frs id"])
+    program_id_col = _find_column(
+        df.columns.tolist(),
+        [
+            "program_sys_id",
+            "program system id",
+            "program_system_id",
+            "program id",
+            "program_id",
+        ],
+    )
+    acronym_col = _find_column(
+        df.columns.tolist(),
+        ["program_acronym", "program acronym", "program_acronym_name", "program acronym name"],
+    )
     if not frs_col or not program_id_col or not acronym_col:
-        raise ValueError("FRS program links missing required columns.")
+        raise ValueError(
+            "FRS program links missing required columns. "
+            f"Found columns: {', '.join(df.columns)}"
+        )
 
     links = df.rename(
         columns={
