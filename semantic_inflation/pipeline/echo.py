@@ -38,6 +38,17 @@ def _find_column(columns: list[str], keywords: list[str]) -> str | None:
     return None
 
 
+def _find_column_with_tokens(columns: list[str], tokens: list[str]) -> str | None:
+    normalized_cols = {_normalize_column(col): col for col in columns}
+    normalized_tokens = [_normalize_column(token) for token in tokens if token]
+    if not normalized_tokens:
+        return None
+    for normalized_col, original in normalized_cols.items():
+        if all(token in normalized_col for token in normalized_tokens):
+            return original
+    return None
+
+
 def _select_case_csv(archive: zipfile.ZipFile) -> str:
     candidates = [name for name in archive.namelist() if name.lower().endswith(".csv")]
     if not candidates:
@@ -87,6 +98,12 @@ def _parse_case_downloads(case_zip: Path, start_year: int, end_year: int) -> pd.
             "penalty_amount",
         ],
     )
+    if not frs_col:
+        frs_col = _find_column_with_tokens(df.columns.tolist(), ["registry", "id"])
+    if not date_col:
+        date_col = _find_column_with_tokens(df.columns.tolist(), ["action", "date"])
+    if not date_col:
+        date_col = _find_column_with_tokens(df.columns.tolist(), ["case", "date"])
     if not frs_col or not date_col:
         raise ValueError("Unable to identify registry ID or action date columns in case data.")
 
