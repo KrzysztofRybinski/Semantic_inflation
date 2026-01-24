@@ -179,19 +179,24 @@ def _parse_case_downloads(
                     facilities_frs_col: "frs_id",
                 }
             )
-            facilities_subset["activity_id"] = facilities_subset["activity_id"].astype(str)
-            facilities_subset["frs_id"] = facilities_subset["frs_id"].astype(str)
+            facilities_subset["activity_id"] = facilities_subset["activity_id"].astype(
+                "string"
+            )
+            facilities_subset["frs_id"] = facilities_subset["frs_id"].astype("string")
             enforcement_df = df.copy()
             enforcement_df = enforcement_df.rename(
                 columns={enforcement_activity_col: "activity_id"}
             )
-            enforcement_df["activity_id"] = enforcement_df["activity_id"].astype(str)
-            df = enforcement_df.merge(
+            enforcement_df["activity_id"] = enforcement_df["activity_id"].astype("string")
+            merged = enforcement_df.merge(
                 facilities_subset,
                 on="activity_id",
                 how="left",
             )
-            frs_col = "frs_id"
+            frs_match_share = merged["frs_id"].notna().mean()
+            if frs_match_share >= 0.9:
+                df = merged
+                frs_col = "frs_id"
     if not frs_col:
         frs_col = _find_column(
             df.columns.tolist(),
