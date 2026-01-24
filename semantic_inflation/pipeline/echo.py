@@ -49,6 +49,42 @@ def _find_column_with_tokens(columns: list[str], tokens: list[str]) -> str | Non
     return None
 
 
+def _find_date_column(columns: list[str]) -> str | None:
+    date_keywords = [
+        "action_date",
+        "actiondate",
+        "enf_action_date",
+        "enfactiondate",
+        "enforcement_action_date",
+        "final_action_date",
+        "finalactiondate",
+        "final action date",
+        "case_date",
+        "case_action_date",
+        "caseactiondate",
+        "case action date",
+        "action date",
+    ]
+    date_col = _find_column(columns, date_keywords)
+    if date_col:
+        return date_col
+    date_col = _find_column_with_tokens(columns, ["action", "date"])
+    if date_col:
+        return date_col
+    date_col = _find_column_with_tokens(columns, ["case", "date"])
+    if date_col:
+        return date_col
+    normalized_cols = {_normalize_column(col): col for col in columns}
+    for normalized_col, original in normalized_cols.items():
+        if "date" in normalized_col and (
+            "action" in normalized_col
+            or "final" in normalized_col
+            or "case" in normalized_col
+        ):
+            return original
+    return None
+
+
 def _select_case_csv(archive: zipfile.ZipFile) -> str:
     candidates = [name for name in archive.namelist() if name.lower().endswith(".csv")]
     if not candidates:
@@ -74,21 +110,11 @@ def _parse_case_downloads(case_zip: Path, start_year: int, end_year: int) -> pd.
             "frsid",
             "frs_registry_id",
             "frs registry id",
+            "epa_registry_id",
+            "registry identifier",
         ],
     )
-    date_col = _find_column(
-        df.columns.tolist(),
-        [
-            "action_date",
-            "actiondate",
-            "enf_action_date",
-            "enfactiondate",
-            "enforcement_action_date",
-            "case_date",
-            "case_action_date",
-            "caseactiondate",
-        ],
-    )
+    date_col = _find_date_column(df.columns.tolist())
     penalty_col = _find_column(
         df.columns.tolist(),
         [
@@ -100,12 +126,16 @@ def _parse_case_downloads(case_zip: Path, start_year: int, end_year: int) -> pd.
     )
     if not frs_col:
         frs_col = _find_column_with_tokens(df.columns.tolist(), ["registry", "id"])
+    if not frs_col:
+        frs_col = _find_column_with_tokens(df.columns.tolist(), ["frs", "id"])
     if not date_col:
-        date_col = _find_column_with_tokens(df.columns.tolist(), ["action", "date"])
-    if not date_col:
-        date_col = _find_column_with_tokens(df.columns.tolist(), ["case", "date"])
+        date_col = _find_date_column(df.columns.tolist())
     if not frs_col or not date_col:
-        raise ValueError("Unable to identify registry ID or action date columns in case data.")
+        column_list = ", ".join(df.columns.astype(str).tolist())
+        raise ValueError(
+            "Unable to identify registry ID or action date columns in case data. "
+            f"Columns observed: {column_list}"
+        )
 
     df = df.rename(columns={frs_col: "frs_id", date_col: "action_date"})
     if penalty_col:
