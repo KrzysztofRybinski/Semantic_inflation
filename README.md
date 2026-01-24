@@ -51,11 +51,10 @@ Run the full pipeline (preflight checks → SEC → GHGRP → ECHO → linkage �
 uv run semantic-inflation run-all --config configs/pipeline.toml
 ```
 
-> **Note:** `configs/pipeline.toml` points `pipeline.sec.filings_index_path` at the
-> sample fixture in `data/fixtures/filings_index.csv`. If you want to run against
-> real SEC filings, generate a filings index CSV and update the config to point at
-> your `data/raw/sec/filings_index.csv` (or another path). When using the SEC API
-> directly, the pipeline enforces conservative throttling (`sec.max_requests_per_second = 8`).
+> **Note:** `configs/pipeline.toml` is configured for a full network run. It builds a
+> filings index at `data/raw/sec/filings_index.csv` and then downloads real SEC
+> filings. When using the SEC API directly, the pipeline enforces conservative
+> throttling (`sec.max_requests_per_second = 8`).
 
 Run the preflight doctor checks (creates missing directories, cleans zero-byte files):
 

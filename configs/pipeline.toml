@@ -22,18 +22,21 @@ mode = "full"
 sample_frame = "ghgrp_matched"
 
 [pipeline.sec]
-filings_index_path = "data/fixtures/filings_index.csv"
-build_index = false
+filings_index_path = "data/raw/sec/filings_index.csv"
+build_index = true
 company_tickers_url = "https://www.sec.gov/files/company_tickers.json"
 
 [pipeline.ghgrp]
 use_fixture = false
 fixture_path = "data/fixtures/ghgrp_sample.csv"
-data_sets_url = "https://www.epa.gov/ghgreporting/ghgrp-data-sets"
+data_sets_page = "https://www.epa.gov/ghgreporting/data-sets"
+data_summary_label = "Data Summary Spreadsheets"
+parent_companies_label = "Reported Parent Companies"
 data_summary_url = ""
 parent_companies_url = ""
 parent_companies_path = "data/raw/epa/ghgrp/ghgrp_parent_companies.xlsb"
 years = [2010, 2011, 2012, 2013, 2014, 2015, 2016, 2017, 2018, 2019, 2020, 2021, 2022, 2023]
+cache_raw = true
 
 [pipeline.echo]
 use_fixture = false
@@ -41,9 +44,12 @@ fixture_path = "data/fixtures/echo_sample.csv"
 case_downloads_url = "https://echo.epa.gov/files/echodownloads/case_downloads.zip"
 frs_downloads_url = "https://echo.epa.gov/files/echodownloads/frs_downloads.zip"
 schema_fields = ["FRS_ID", "ACTION_DATE", "PENALTY_AMOUNT", "VIOLATION_COUNT"]
+cache_raw = true
 
 [runtime]
 offline = false
+max_workers = 4
+chunk_size = 100000
 
 [linkage]
 fuzzy_threshold_high = 95

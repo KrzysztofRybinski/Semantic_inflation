@@ -133,6 +133,7 @@ def download_file(
         limiter.acquire()
     response = _fetch_bytes(url, headers=headers, timeout=timeout)
     destination.write_bytes(response.content)
+    print(f"Downloaded: {destination}")
     sha = sha256_bytes(response.content)
     _log_result(
         response.status_code,
