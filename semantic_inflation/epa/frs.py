@@ -44,11 +44,20 @@ def parse_frs_program_links(zip_path: Path) -> pd.DataFrame:
             "program_system_id",
             "program id",
             "program_id",
+            "pgm_sys_id",
+            "pgm sys id",
         ],
     )
     acronym_col = _find_column(
         df.columns.tolist(),
-        ["program_acronym", "program acronym", "program_acronym_name", "program acronym name"],
+        [
+            "program_acronym",
+            "program acronym",
+            "program_acronym_name",
+            "program acronym name",
+            "pgm_sys_acrnm",
+            "pgm sys acrnm",
+        ],
     )
     if not frs_col or not program_id_col or not acronym_col:
         raise ValueError(
