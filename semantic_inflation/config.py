@@ -106,9 +106,9 @@ class RuntimeSettings(BaseModel):
 
 
 class PipelineSecSettings(BaseModel):
-    filings_index_path: Path = Path("data/fixtures/filings_index.csv")
+    filings_index_path: Path = Path("data/raw/sec/filings_index.csv")
     max_filings: int | None = None
-    build_index: bool = False
+    build_index: bool = True
     company_tickers_url: str = "https://www.sec.gov/files/company_tickers.json"
 
 
