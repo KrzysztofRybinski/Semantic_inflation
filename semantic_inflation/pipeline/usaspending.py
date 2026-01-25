@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import json
 import logging
 import math
@@ -72,6 +73,36 @@ def _resolve_manifest_path(context: PipelineContext) -> Path:
     if configured:
         return configured if configured.is_absolute() else context.repo_root / configured
     return settings.paths.outputs_dir / "logs" / "usaspending_manifest.jsonl"
+
+
+def _payload_cache_key(base_payload: dict[str, Any], page_size: int, api_url: str) -> str:
+    normalized = api_url.rstrip("/")
+    payload_blob = json.dumps(
+        {"api_url": normalized, "payload": base_payload, "page_size": page_size},
+        sort_keys=True,
+        default=str,
+    )
+    return hashlib.sha256(payload_blob.encode("utf-8")).hexdigest()[:10]
+
+
+def _default_request_payload(context: PipelineContext) -> dict[str, Any]:
+    start = f"{context.settings.project.start_year}-01-01"
+    end = f"{context.settings.project.end_year}-12-31"
+    return {
+        "filters": {
+            "time_period": [{"start_date": start, "end_date": end}],
+        },
+        "fields": ["Award ID"],
+    }
+
+
+def _prepare_request_payload(context: PipelineContext) -> dict[str, Any]:
+    base_payload = dict(context.settings.pipeline.usaspending.request_payload)
+    if not base_payload:
+        base_payload = _default_request_payload(context)
+    base_payload.setdefault("filters", {})
+    base_payload.setdefault("fields", ["Award ID"])
+    return base_payload
 
 
 def _load_cached_page(path: Path, warnings: list[str]) -> dict[str, Any] | None:
@@ -167,7 +198,7 @@ def download_usaspending_awards(context: PipelineContext, force: bool = False) -
 
     api_url = settings.pipeline.usaspending.api_url
     fallback_url = api_url.rstrip("/") if api_url.endswith("/") else f"{api_url}/"
-    base_payload = settings.pipeline.usaspending.request_payload
+    base_payload = _prepare_request_payload(context)
     page_size = settings.pipeline.usaspending.page_size
     max_pages = settings.pipeline.usaspending.max_pages
     start_page = settings.pipeline.usaspending.start_page
@@ -181,10 +212,16 @@ def download_usaspending_awards(context: PipelineContext, force: bool = False) -
         headers["User-Agent"] = user_agent
 
     warnings: list[str] = []
+    if not settings.pipeline.usaspending.request_payload:
+        warnings.append(
+            "USAspending request_payload was empty; using a default time_period filter "
+            f"({settings.project.start_year}-{settings.project.end_year}) and Award ID field."
+        )
     records: list[dict[str, Any]] = []
     total_pages: int | None = None
     page = start_page
     page_count = 0
+    cache_key = _payload_cache_key(base_payload, page_size, api_url)
     while True:
         if max_pages is not None and page_count >= max_pages:
             warnings.append(
@@ -194,7 +231,7 @@ def download_usaspending_awards(context: PipelineContext, force: bool = False) -
         payload = dict(base_payload)
         payload["page"] = page
         payload["limit"] = page_size
-        cache_path = page_dir / f"page_{page:04d}.json"
+        cache_path = page_dir / f"page_{page:04d}_{cache_key}.json"
         page_result = _fetch_page(
             api_url,
             fallback_url,
@@ -208,6 +245,7 @@ def download_usaspending_awards(context: PipelineContext, force: bool = False) -
         if page_result.api_url != api_url:
             api_url = page_result.api_url
             fallback_url = api_url.rstrip("/") if api_url.endswith("/") else f"{api_url}/"
+            cache_key = _payload_cache_key(base_payload, page_size, api_url)
         page_payload = page_result.payload
         page_results = page_payload.get("results", [])
         if not isinstance(page_results, list):
