@@ -37,6 +37,36 @@ def _has_variation(series: pd.Series) -> bool:
     return series.nunique(dropna=True) > 1
 
 
+def _drop_constant_columns(df: pd.DataFrame) -> tuple[pd.DataFrame, list[str]]:
+    warnings: list[str] = []
+    keep_cols: list[str] = []
+    for column in df.columns:
+        series = pd.to_numeric(df[column], errors="coerce")
+        if series.nunique(dropna=True) <= 1:
+            warnings.append(f"Dropped column '{column}' due to no variation.")
+            continue
+        keep_cols.append(column)
+    return df[keep_cols], warnings
+
+
+def _select_full_rank(df: pd.DataFrame) -> tuple[pd.DataFrame, list[str]]:
+    warnings: list[str] = []
+    if df.empty:
+        return df, warnings
+    selected: list[str] = []
+    for column in df.columns:
+        candidate = df[selected + [column]].apply(pd.to_numeric, errors="coerce").dropna()
+        if candidate.empty:
+            warnings.append(f"Dropped column '{column}' due to empty non-null overlap.")
+            continue
+        rank = np.linalg.matrix_rank(candidate.to_numpy())
+        if rank <= len(selected):
+            warnings.append(f"Dropped column '{column}' due to collinearity.")
+            continue
+        selected.append(column)
+    return df[selected], warnings
+
+
 def run_models(context: PipelineContext, force: bool = False) -> StageResult:
     settings = context.settings
     output_path = settings.paths.outputs_dir / "results" / "models_summary.json"
@@ -60,29 +90,37 @@ def run_models(context: PipelineContext, force: bool = False) -> StageResult:
     warnings: list[str] = []
     can_fit_ols = len(panel) >= 2 and _has_variation(si)
     if can_fit_ols:
-        X = sm.add_constant(pd.DataFrame({"emissions_mtco2e": emissions}))
-        model = sm.OLS(si, X, missing="drop")
-        results = model.fit()
-        placebo = sm.OLS(si.sample(frac=1.0, random_state=42).reset_index(drop=True), X).fit()
-        ols_summary = {
-            "params": results.params.to_dict(),
-            "pvalues": results.pvalues.to_dict(),
-            "r2": _safe_r2(results),
-        }
-        placebo_summary = {
-            "params": placebo.params.to_dict(),
-            "pvalues": placebo.pvalues.to_dict(),
-            "r2": _safe_r2(placebo),
-        }
-    else:
+        raw_X = pd.DataFrame({"emissions_mtco2e": emissions})
+        raw_X, dropped_warnings = _drop_constant_columns(raw_X)
+        warnings.extend(dropped_warnings)
+        raw_X, rank_warnings = _select_full_rank(raw_X)
+        warnings.extend(rank_warnings)
+        if raw_X.empty:
+            can_fit_ols = False
+        else:
+            X = sm.add_constant(raw_X, has_constant="add")
+            model = sm.OLS(si, X, missing="drop")
+            results = model.fit()
+            placebo = sm.OLS(si.sample(frac=1.0, random_state=42).reset_index(drop=True), X).fit()
+            ols_summary = {
+                "params": results.params.to_dict(),
+                "pvalues": results.pvalues.to_dict(),
+                "r2": _safe_r2(results),
+            }
+            placebo_summary = {
+                "params": placebo.params.to_dict(),
+                "pvalues": placebo.pvalues.to_dict(),
+                "r2": _safe_r2(placebo),
+            }
+    if not can_fit_ols:
         warnings.append(
-            "OLS skipped because the panel has fewer than 2 rows or no variation in the target."
+            "OLS skipped because the panel has fewer than 2 rows or lacks usable predictors."
         )
         ols_summary = {
             "params": None,
             "pvalues": None,
             "r2": None,
-            "note": "OLS skipped due to insufficient variation in si_simple.",
+            "note": "OLS skipped due to insufficient variation in si_simple or predictors.",
         }
         placebo_summary = {
             "params": None,
@@ -93,6 +131,8 @@ def run_models(context: PipelineContext, force: bool = False) -> StageResult:
 
     clf_target = (enforcement > 0).astype(int)
     clf_features = pd.DataFrame({"si_simple": si, "emissions_mtco2e": emissions})
+    clf_features, dropped_warnings = _drop_constant_columns(clf_features)
+    warnings.extend(dropped_warnings)
     class_counts = clf_target.value_counts().to_dict()
     if len(class_counts) > 1 and len(clf_target) >= 2:
         try:

@@ -14,6 +14,7 @@ from semantic_inflation.pipeline.panel import build_panel
 from semantic_inflation.pipeline.sec import download_sec_filings
 from semantic_inflation.pipeline.sec_index import build_sec_filings_index
 from semantic_inflation.pipeline.state import StageResult
+from semantic_inflation.pipeline.usaspending import download_usaspending_awards
 
 
 def run_pipeline(context: PipelineContext, *, force: bool = False) -> dict[str, Any]:
@@ -25,6 +26,7 @@ def run_pipeline(context: PipelineContext, *, force: bool = False) -> dict[str, 
 
     stages: list[tuple[str, callable[[PipelineContext, bool], StageResult]]] = [
         ("doctor", run_doctor),
+        ("usaspending", download_usaspending_awards),
         ("ghgrp_download", download_ghgrp),
         ("echo_download", download_echo),
         ("parent_to_cik", build_parent_to_cik),

@@ -24,6 +24,12 @@ frs_downloads_url = "https://echo.epa.gov/files/echodownloads/frs_downloads.zip"
 cache_raw = true
 use_fixture = false
 
+[pipeline.usaspending]
+api_url = "https://api.usaspending.gov/api/v2/awards/search/"
+page_size = 100
+start_page = 1
+cache_pages = true
+
 [linkage]
 fuzzy_threshold_high = 95
 fuzzy_threshold_medium = 90

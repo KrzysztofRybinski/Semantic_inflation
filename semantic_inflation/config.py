@@ -134,6 +134,31 @@ class PipelineEchoSettings(BaseModel):
     cache_raw: bool = True
 
 
+class PipelineUsaspendingSettings(BaseModel):
+    api_url: str = "https://api.usaspending.gov/api/v2/awards/search/"
+    request_payload: dict[str, Any] = Field(default_factory=dict)
+    page_size: int = 100
+    max_pages: int | None = None
+    start_page: int = 1
+    cache_pages: bool = True
+    pages_dir: Path | None = None
+    output_path: Path | None = None
+    manifest_path: Path | None = None
+    user_agent_env: str = "USASPENDING_USER_AGENT"
+    user_agent: str | None = None
+
+    @field_validator("page_size")
+    @classmethod
+    def _positive_page_size(cls, value: int) -> int:
+        if value <= 0:
+            raise ValueError("page_size must be positive.")
+        return value
+
+    def resolved_user_agent(self) -> str | None:
+        env_value = os.getenv(self.user_agent_env, "").strip()
+        return (self.user_agent or env_value).strip() or None
+
+
 class LinkageSettings(BaseModel):
     fuzzy_threshold_high: int = 95
     fuzzy_threshold_medium: int = 90
@@ -155,6 +180,7 @@ class PipelineSettings(BaseModel):
     sec: PipelineSecSettings = Field(default_factory=PipelineSecSettings)
     ghgrp: PipelineGhgrpSettings = Field(default_factory=PipelineGhgrpSettings)
     echo: PipelineEchoSettings = Field(default_factory=PipelineEchoSettings)
+    usaspending: PipelineUsaspendingSettings = Field(default_factory=PipelineUsaspendingSettings)
 
 
 class Settings(BaseSettings):
