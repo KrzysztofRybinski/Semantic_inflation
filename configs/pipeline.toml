@@ -46,6 +46,12 @@ frs_downloads_url = "https://echo.epa.gov/files/echodownloads/frs_downloads.zip"
 schema_fields = ["FRS_ID", "ACTION_DATE", "PENALTY_AMOUNT", "VIOLATION_COUNT"]
 cache_raw = true
 
+[pipeline.usaspending]
+api_url = "https://api.usaspending.gov/api/v2/awards/search/"
+page_size = 100
+start_page = 1
+cache_pages = true
+
 [runtime]
 offline = false
 max_workers = 4

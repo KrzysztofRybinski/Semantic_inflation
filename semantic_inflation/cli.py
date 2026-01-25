@@ -14,6 +14,7 @@ from semantic_inflation.pipeline.panel import build_panel
 from semantic_inflation.pipeline.parent_to_cik import build_parent_to_cik
 from semantic_inflation.pipeline.sec import download_sec_filings
 from semantic_inflation.pipeline.sec_index import build_sec_filings_index
+from semantic_inflation.pipeline.usaspending import download_usaspending_awards
 from semantic_inflation.text.clean_html import html_to_text
 from semantic_inflation.text.features import compute_features_from_file
 
@@ -168,6 +169,14 @@ def _cmd_echo_download(args: argparse.Namespace) -> int:
     return 0
 
 
+def _cmd_usaspending_download(args: argparse.Namespace) -> int:
+    settings = load_settings(args.config)
+    context = PipelineContext(settings)
+    payload = download_usaspending_awards(context, force=args.force)
+    print(json.dumps(payload.to_dict(), indent=2, sort_keys=True))
+    return 0
+
+
 def _cmd_link_build(args: argparse.Namespace) -> int:
     settings = load_settings(args.config)
     context = PipelineContext(settings)
@@ -301,6 +310,15 @@ def build_parser() -> argparse.ArgumentParser:
         "download", help="Download ECHO data", parents=[config_parent]
     )
     p_echo_download.set_defaults(func=_cmd_echo_download)
+
+    p_usaspending = sub.add_parser(
+        "usaspending", help="USAspending ingestion commands", parents=[config_parent]
+    )
+    usaspending_sub = p_usaspending.add_subparsers(dest="usaspending_command", required=True)
+    p_usaspending_download = usaspending_sub.add_parser(
+        "download", help="Download USAspending awards", parents=[config_parent]
+    )
+    p_usaspending_download.set_defaults(func=_cmd_usaspending_download)
 
     p_link = sub.add_parser("link", help="Linkage commands", parents=[config_parent])
     link_sub = p_link.add_subparsers(dest="link_command", required=True)
