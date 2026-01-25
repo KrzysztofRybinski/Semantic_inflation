@@ -48,7 +48,7 @@ request_timeout_seconds = 60
 offline = false
 
 [pipeline.usaspending]
-api_url = "https://api.usaspending.gov/api/v2/awards/search/"
+api_url = "https://api.usaspending.gov/api/v2/awards/search"
 page_size = 100
 start_page = 1
 cache_pages = true

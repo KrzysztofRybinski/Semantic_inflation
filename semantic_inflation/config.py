@@ -135,7 +135,7 @@ class PipelineEchoSettings(BaseModel):
 
 
 class PipelineUsaspendingSettings(BaseModel):
-    api_url: str = "https://api.usaspending.gov/api/v2/awards/search/"
+    api_url: str = "https://api.usaspending.gov/api/v2/awards/search"
     request_payload: dict[str, Any] = Field(default_factory=dict)
     page_size: int = 100
     max_pages: int | None = None
