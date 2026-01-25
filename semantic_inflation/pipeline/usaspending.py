@@ -28,6 +28,7 @@ LOGGER = logging.getLogger(__name__)
 class PageFetchResult:
     payload: dict[str, Any]
     cached: bool
+    api_url: str
 
 
 def _should_retry(exc: BaseException) -> bool:
@@ -114,6 +115,7 @@ def _has_next(payload: dict[str, Any], page: int, total_pages: int | None) -> bo
 
 def _fetch_page(
     url: str,
+    fallback_url: str | None,
     payload: dict[str, Any],
     headers: dict[str, str],
     timeout: float,
@@ -124,12 +126,27 @@ def _fetch_page(
     if cache_pages:
         cached = _load_cached_page(cache_path, warnings)
         if cached is not None:
-            return PageFetchResult(payload=cached, cached=True)
+            return PageFetchResult(payload=cached, cached=True, api_url=url)
     cache_path.parent.mkdir(parents=True, exist_ok=True)
-    response_payload = _post_json(url, payload, headers, timeout)
+    try:
+        response_payload = _post_json(url, payload, headers, timeout)
+        used_url = url
+    except httpx.HTTPStatusError as exc:
+        if (
+            exc.response.status_code == 404
+            and fallback_url
+            and fallback_url != url
+        ):
+            warnings.append(
+                f"USAspending endpoint {url} returned 404; retrying with {fallback_url}."
+            )
+            response_payload = _post_json(fallback_url, payload, headers, timeout)
+            used_url = fallback_url
+        else:
+            raise
     if cache_pages:
         cache_path.write_text(json.dumps(response_payload, sort_keys=True), encoding="utf-8")
-    return PageFetchResult(payload=response_payload, cached=False)
+    return PageFetchResult(payload=response_payload, cached=False, api_url=used_url)
 
 
 def download_usaspending_awards(context: PipelineContext, force: bool = False) -> StageResult:
@@ -149,6 +166,7 @@ def download_usaspending_awards(context: PipelineContext, force: bool = False) -
         )
 
     api_url = settings.pipeline.usaspending.api_url
+    fallback_url = api_url.rstrip("/") if api_url.endswith("/") else f"{api_url}/"
     base_payload = settings.pipeline.usaspending.request_payload
     page_size = settings.pipeline.usaspending.page_size
     max_pages = settings.pipeline.usaspending.max_pages
@@ -178,8 +196,18 @@ def download_usaspending_awards(context: PipelineContext, force: bool = False) -
         payload["limit"] = page_size
         cache_path = page_dir / f"page_{page:04d}.json"
         page_result = _fetch_page(
-            api_url, payload, headers, timeout, cache_path, cache_pages, warnings
+            api_url,
+            fallback_url,
+            payload,
+            headers,
+            timeout,
+            cache_path,
+            cache_pages,
+            warnings,
         )
+        if page_result.api_url != api_url:
+            api_url = page_result.api_url
+            fallback_url = api_url.rstrip("/") if api_url.endswith("/") else f"{api_url}/"
         page_payload = page_result.payload
         page_results = page_payload.get("results", [])
         if not isinstance(page_results, list):
